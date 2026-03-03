@@ -1,0 +1,158 @@
+{% extends 'attendance_manage/base.html' %}
+{% load tz %}
+
+{% block title %}Admin Dashboard{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <div class="stat-card text-center">
+            <i class="bi bi-people fs-1 text-primary"></i>
+            <h3>{{ total_students }}</h3>
+            <p class="text-muted">Total Students</p>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="stat-card text-center">
+            <i class="bi bi-person-badge fs-1 text-success"></i>
+            <h3>{{ total_teachers }}</h3>
+            <p class="text-muted">Total Teachers</p>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="stat-card text-center">
+            <i class="bi bi-book fs-1 text-info"></i>
+            <h3>{{ total_courses }}</h3>
+            <p class="text-muted">Total Courses</p>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="stat-card text-center">
+            <i class="bi bi-calendar-check fs-1 text-warning"></i>
+            <h3>{{ total_attendance }}</h3>
+            <p class="text-muted">Total Attendances</p>
+        </div>
+    </div>
+</div>
+
+<!-- Status Statistics -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Attendance Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-success">{{ status_stats.PRESENT }}</h4>
+                            <span class="badge bg-success">Present</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-warning">{{ status_stats.LATE }}</h4>
+                            <span class="badge bg-warning text-dark">Late</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-danger">{{ status_stats.ABSENT }}</h4>
+                            <span class="badge bg-danger">Absent</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-info">{{ status_stats.EXCUSED }}</h4>
+                            <span class="badge bg-info">Excused</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Recent Attendance -->
+    <div class="col-md-7 mb-4">
+        <div class="card">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Attendance</h5>
+                <a href="{% url 'attendance_manage:attendance_list' %}" class="btn btn-sm btn-light">View All</a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Course</th>
+                                <th>Session</th>
+                                <th>Status</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for attendance in recent_attendance %}
+                            <tr>
+                                <td>{{ attendance.student.first_name }} {{ attendance.student.last_name }}</td>
+                                <td>{{ attendance.session.course.course_name }}</td>
+                                <td>{{ attendance.session.session_number }}</td>
+                                <td>
+                                    <span class="badge 
+                                        {% if attendance.status == 'PRESENT' %}bg-success
+                                        {% elif attendance.status == 'LATE' %}bg-warning text-dark
+                                        {% elif attendance.status == 'ABSENT' %}bg-danger
+                                        {% else %}bg-info{% endif %}">
+                                        {{ attendance.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ attendance.check_in_time|localtime|date:"Y-m-d H:i" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center">No recent attendance</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Upcoming Sessions -->
+    <div class="col-md-5 mb-4">
+        <div class="card">
+            <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-calendar-event"></i> Upcoming Sessions</h5>
+                <a href="{% url 'attendance_manage:session_list' %}" class="btn btn-sm btn-light">Manage</a>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    {% for session in upcoming_sessions %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between">
+                            <h6>{{ session.course.course_name }}</h6>
+                            <small class="text-muted">Session {{ session.session_number }}</small>
+                        </div>
+                        <p class="mb-1">
+                            <i class="bi bi-calendar"></i> {{ session.session_date|date:"Y-m-d" }}
+                            {% if session.start_time %}
+                                <i class="bi bi-clock ms-2"></i> {{ session.start_time|time:"H:i" }}
+                            {% endif %}
+                        </p>
+                        <small class="text-muted">{{ session.topic|truncatechars:50 }}</small>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted text-center">No upcoming sessions</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

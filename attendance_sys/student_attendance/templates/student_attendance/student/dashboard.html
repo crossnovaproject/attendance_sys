@@ -1,0 +1,342 @@
+{% extends 'student_attendance/base.html' %}
+{% load tz %}
+
+{% block title %}Student Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        transition: transform 0.3s;
+        margin-bottom: 20px;
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+    }
+    .session-card {
+        border-left: 4px solid #007bff;
+        margin-bottom: 10px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+    .session-card.past {
+        border-left-color: #6c757d;
+        opacity: 0.8;
+    }
+    .session-card.past.missed {
+        border-left-color: #dc3545;
+        background-color: #fff3f3;
+    }
+    .session-card.upcoming {
+        border-left-color: #28a745;
+    }
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.85em;
+        font-weight: 600;
+    }
+    .bg-success-light { background-color: #d4edda; color: #155724; }
+    .bg-warning-light { background-color: #fff3cd; color: #856404; }
+    .bg-danger-light { background-color: #f8d7da; color: #721c24; }
+    .bg-secondary-light { background-color: #e2e3e5; color: #383d41; }
+
+    .auto-badge {
+        font-size: 0.7em;
+        padding: 2px 5px;
+        border-radius: 3px;
+        background-color: #6c757d;
+        color: white;
+        margin-left: 5px;
+    }
+    .missed-icon {
+        color: #dc3545;
+        margin-right: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Student Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-person"></i> Student Dashboard</h2>
+            <p class="text-muted">
+                Welcome, {{ student.first_name }} {{ student.last_name }}
+                <span class="badge bg-secondary">{{ student.student_id }}</span>
+            </p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="btn-group">
+                <a href="{% url 'student_attendance:mark_attendance' %}" class="btn btn-success">
+                    <i class="bi bi-check-circle"></i> Mark Attendance
+                </a>
+                <a href="{% url 'student_attendance:my_attendance' %}" class="btn btn-info">
+                    <i class="bi bi-clock-history"></i> History
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto-marked Alert -->
+    {% if auto_marked_count and auto_marked_count > 0 %}
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-info-circle"></i>
+        <strong>Notice:</strong> {{ auto_marked_count }} past session(s) were automatically marked as absent because they ended without your attendance.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Overall Buffer Summary -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Your Attendance Buffer</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <h3>{{ total_buffer_all|default:"0" }}</h3>
+                            <p class="text-muted">Total Buffer</p>
+                        </div>
+                        <div class="col-md-4">
+                            <h3 class="text-warning">{{ total_used_buffer_all|default:"0" }}</h3>
+                            <p class="text-muted">Used</p>
+                        </div>
+                        <div class="col-md-4">
+                            <h3 class="{% if total_remaining_buffer_all > 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ total_remaining_buffer_all|default:"0" }}
+                            </h3>
+                            <p class="text-muted">Remaining</p>
+                        </div>
+                    </div>
+                    <div class="progress mt-3" style="height: 20px;">
+                        <div class="progress-bar bg-warning"
+                             role="progressbar"
+                             style="width: {% widthratio total_used_buffer_all total_buffer_all 100 %}%">
+                            Used: {{ total_used_buffer_all|floatformat:1 }} / {{ total_buffer_all }}
+                        </div>
+                    </div>
+                    <p class="text-muted mt-2 mb-0 small">
+                        <i class="bi bi-info-circle"></i>
+                        Need 80% attendance (20% buffer). Late = -0.5, Absent/Excused = -1.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Course Attendance Summary -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> My Courses</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Course</th>
+                                    <th>Total</th>
+                                    <th>Past</th>
+                                    <th>Left</th>
+                                    <th>Present</th>
+                                    <th>Late</th>
+                                    <th>Absent</th>
+                                    <th>Excused</th>
+                                    <th>Rate</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in course_stats %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ stat.course_name }}</strong><br>
+                                        <small class="text-muted">{{ stat.course_id }}</small>
+                                    </td>
+                                    <td>{{ stat.total_sessions }}</td>
+                                    <td>{{ stat.past_sessions }}</td>
+                                    <td>{{ stat.sessions_left }}</td>
+                                    <td class="text-success">{{ stat.present }}</td>
+                                    <td class="text-warning">{{ stat.late }}</td>
+                                    <td class="text-danger">{{ stat.absent }}</td>
+                                    <td class="text-info">{{ stat.excused }}</td>
+                                    <td>
+                                        {% if stat.past_sessions > 0 %}
+                                            <div class="d-flex align-items-center">
+                                                <div class="progress flex-grow-1 me-2" style="height: 8px; width: 60px;">
+                                                    <div class="progress-bar bg-{{ stat.status_class }}"
+                                                         role="progressbar"
+                                                         style="width: {{ stat.attendance_rate }}%"
+                                                         aria-valuenow="{{ stat.attendance_rate }}"
+                                                         aria-valuemin="0"
+                                                         aria-valuemax="100">
+                                                    </div>
+                                                </div>
+                                                <span>{{ stat.attendance_rate }}%</span>
+                                            </div>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="status-badge bg-{{ stat.status_class }}-light">
+                                            {{ stat.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted">
+                                        No course data available
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timetable with Course ID -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Upcoming ({{ upcoming_sessions|length }})</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if has_upcoming %}
+                        {% for session in upcoming_sessions %}
+                        <div class="session-card upcoming">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h6 class="mb-1">{{ session.course_name }}</h6>
+                                    <small class="text-muted">{{ session.course_id }} - Session {{ session.session_number }}</small>
+                                </div>
+                                <span class="badge bg-success">{{ session.date|date:"m/d" }}</span>
+                            </div>
+                            <p class="mb-0 mt-2">
+                                <i class="bi bi-clock"></i>
+                                {% if session.start_time %}{{ session.start_time|time:"H:i" }}{% else %}TBA{% endif %}
+                                {% if session.topic %}<br><small>{{ session.topic|truncatechars:40 }}</small>{% endif %}
+                            </p>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center">No upcoming sessions</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Past ({{ past_sessions|length }})</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if has_past %}
+                        {% for session in past_sessions %}
+                        <div class="session-card past {% if session.missed %}missed{% endif %}">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h6 class="mb-1">{{ session.course_name }}</h6>
+                                    <small class="text-muted">{{ session.course_id }} - Session {{ session.session_number }}</small>
+                                </div>
+                                <span class="badge bg-secondary">{{ session.date|date:"m/d" }}</span>
+                            </div>
+                            <p class="mb-0 mt-2">
+                                {% if session.missed %}
+                                    <i class="bi bi-x-circle-fill missed-icon"></i> Missed - No attendance
+                                {% else %}
+                                    <i class="bi bi-check-circle text-muted"></i> Completed
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center">No past sessions</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Attendance -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Recent Activity</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Course</th>
+                                    <th>Session</th>
+                                    <th>Status</th>
+                                    <th>Buffer Impact</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for a in recent_attendance %}
+                                <tr>
+                                    <td>{{ a.check_in_time|date:"m/d" }}</td>
+                                    <td>{{ a.session.course.course_id }} - {{ a.session.course.course_name|truncatechars:20 }}</td>
+                                    <td>Session {{ a.session.session_number }}</td>
+                                    <td>
+                                        {% if a.notes and 'Auto-marked' in a.notes %}
+                                            <span class="badge bg-secondary" title="{{ a.notes }}">Auto</span>
+                                        {% endif %}
+                                        <span class="badge
+                                            {% if a.status == 'PRESENT' %}bg-success
+                                            {% elif a.status == 'LATE' %}bg-warning text-dark
+                                            {% elif a.status == 'ABSENT' %}bg-danger
+                                            {% else %}bg-info{% endif %}">
+                                            {{ a.get_status_display }}
+                                        </span>
+                                        {% if a.notes and 'Auto-marked' in a.notes %}
+                                            <small class="text-muted d-block">{{ a.notes|truncatechars:50 }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if a.status == 'PRESENT' %}
+                                            <span class="text-success">+1 session</span>
+                                        {% elif a.status == 'LATE' %}
+                                            <span class="text-warning">-0.5 buffer</span>
+                                        {% elif a.status == 'ABSENT' %}
+                                            <span class="text-danger">-1 buffer</span>
+                                        {% elif a.status == 'EXCUSED' %}
+                                            <span class="text-info">-1 buffer (excused)</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center">No recent activity</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

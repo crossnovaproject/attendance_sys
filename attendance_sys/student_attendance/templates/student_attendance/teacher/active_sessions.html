@@ -1,0 +1,705 @@
+{% extends 'student_attendance/base.html' %}
+{% load tz %}
+
+{% block title %}Active Sessions{% endblock %}
+
+{% block extra_css %}
+<style>
+    .qr-container {
+        min-height: 150px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .countdown {
+        font-weight: bold;
+        font-size: 1.1em;
+    }
+    .session-card {
+        transition: all 0.3s ease;
+    }
+    .session-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .qr-modal-body {
+        padding: 2rem;
+    }
+    #modalQRCode canvas {
+        max-width: 100%;
+        height: auto;
+    }
+    .attendance-counter {
+        font-size: 1.2em;
+        font-weight: bold;
+        padding: 5px 10px;
+        border-radius: 20px;
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        display: inline-block;
+    }
+    .attendance-badge {
+        font-size: 1.1em;
+        padding: 8px 15px;
+    }
+    .attendance-progress {
+        height: 8px;
+        border-radius: 4px;
+        margin-top: 8px;
+    }
+    .refresh-indicator {
+        font-size: 0.8em;
+        color: #6c757d;
+        margin-left: 10px;
+    }
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    .updating {
+        animation: pulse 1s ease-in-out;
+    }
+    .debug-console {
+        display: none; /* Hide by default, can be toggled for debugging */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <h2><i class="bi bi-play-circle"></i> Active Sessions</h2>
+            <p class="text-muted">Currently active attendance sessions</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-outline-primary me-2" onclick="refreshAllAttendance()" id="refreshBtn">
+                <i class="bi bi-arrow-repeat"></i> Refresh <span class="refresh-indicator" id="refreshTime">now</span>
+            </button>
+            <a href="{% url 'student_attendance:generate_attendance_code' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Generate New Code
+            </a>
+            <a href="{% url 'student_attendance:teacher_dashboard' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Debug Info (Hidden) -->
+    <div id="debug-info" style="display: none;"
+         data-session-ids="{% for session in active_sessions %}{{ session.id }}{% if not forloop.last %},{% endif %}{% endfor %}">
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            {% if active_sessions %}
+                {% for session in active_sessions %}
+                <div class="card mb-3 session-card" id="session-card-{{ session.id }}">
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0">{{ session.course.course_name }}</h5>
+                            <small>{{ session.course.course_id }}</small>
+                        </div>
+                        <div>
+                            <span class="badge bg-light text-success fs-6 me-2">
+                                <i class="bi bi-check-circle"></i> Active
+                            </span>
+                            <span class="attendance-counter" id="attendance-count-{{ session.id }}">
+                                <i class="bi bi-people"></i>
+                                <span id="count-{{ session.id }}">{{ session.attendance_count|default:"0" }}</span> Present
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <p><strong><i class="bi bi-calendar-number"></i> Session:</strong> {{ session.session_number }}</p>
+                                        <p><strong><i class="bi bi-upc-scan"></i> Session Code:</strong> {{ session.session_code }}</p>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <p><strong><i class="bi bi-key"></i> Attendance Code:</strong>
+                                            <span class="badge bg-primary fs-6 p-2">{{ session.attendance_code.code }}</span>
+                                        </p>
+                                        <p><strong><i class="bi bi-clock"></i> Expires:</strong>
+                                            <span class="{% if session.attendance_code.expires_at > now %}text-success{% else %}text-danger{% endif %}">
+                                                {{ session.attendance_code.expires_at|localtime|date:"Y-m-d H:i:s" }}
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-12">
+                                        <p><strong><i class="bi bi-hourglass"></i> Time Remaining:</strong>
+                                            <span class="countdown text-success"
+                                                  data-expires="{{ session.attendance_code.expires_at|date:'c' }}">
+                                                <i class="bi bi-arrow-repeat"></i> Calculating...
+                                            </span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Attendance Progress Bar -->
+                                <div class="mt-3">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-person-check"></i> Attendance Progress</span>
+                                        <span id="progress-text-{{ session.id }}">{{ session.attendance_count|default:"0" }} students</span>
+                                    </div>
+                                    <div class="progress attendance-progress">
+                                        <div class="progress-bar bg-success"
+                                             id="progress-bar-{{ session.id }}"
+                                             role="progressbar"
+                                             style="width: {{ session.attendance_percentage|default:'0' }}%;"
+                                             aria-valuenow="{{ session.attendance_count|default:'0' }}"
+                                             aria-valuemin="0"
+                                             aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-3">
+                                    <a href="{% url 'student_attendance:session_detail' session.id %}"
+                                       class="btn btn-outline-info btn-sm">
+                                        <i class="bi bi-eye"></i> View Details
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-center border-start">
+                                <div id="qr-{{ session.id }}" class="qr-container mb-2">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Loading QR...</span>
+                                    </div>
+                                </div>
+                                <div class="btn-group w-100" role="group">
+                                    <button class="btn btn-outline-primary btn-sm show-qr-btn"
+                                            data-session-id="{{ session.id }}"
+                                            data-code="{{ session.attendance_code.code }}"
+                                            data-course="{{ session.course.course_name }}"
+                                            data-session-num="{{ session.session_number }}"
+                                            data-expires="{{ session.attendance_code.expires_at|date:'c' }}">
+                                        <i class="bi bi-qr-code"></i> Enlarge
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm copy-code-btn"
+                                            data-code="{{ session.attendance_code.code }}">
+                                        <i class="bi bi-clipboard"></i> Copy
+                                    </button>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm mt-2 download-qr-btn"
+                                        data-session-id="{{ session.id }}">
+                                    <i class="bi bi-download"></i> Download QR
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-info text-center py-5">
+                    <i class="bi bi-info-circle fs-1"></i>
+                    <h4 class="mt-3">No Active Sessions</h4>
+                    <p class="mb-3">There are no active attendance sessions at the moment.</p>
+                    <a href="{% url 'student_attendance:generate_attendance_code' %}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Generate Attendance Code
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- QR Code Modal -->
+<div class="modal fade" id="qrModal" tabindex="-1" aria-labelledby="qrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="qrModalLabel">
+                    <i class="bi bi-qr-code"></i> Attendance QR Code
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <div id="modalQRCode" class="mb-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+
+                <h5 id="modalCode" class="mb-3"></h5>
+
+                <div class="mb-3">
+                    <p id="modalCourse" class="mb-1"></p>
+                    <p id="modalExpiry" class="text-muted"></p>
+                    <p id="modalCountdown" class="h6 text-success"></p>
+                    <p id="modalAttendance" class="h6 text-primary"></p>
+                </div>
+
+                <div class="btn-group w-100" role="group">
+                    <button class="btn btn-outline-primary" onclick="copyModalCode()">
+                        <i class="bi bi-clipboard"></i> Copy Code
+                    </button>
+                    <button class="btn btn-outline-success" onclick="downloadModalQR()">
+                        <i class="bi bi-download"></i> Download QR
+                    </button>
+                </div>
+                <button class="btn btn-outline-secondary w-100 mt-2" onclick="printModalQR()">
+                    <i class="bi bi-printer"></i> Print QR
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script>
+// Debug flag - set to true to see console logs
+const DEBUG = true;
+
+function debugLog(...args) {
+    if (DEBUG) {
+        console.log('[Attendance]', ...args);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    debugLog('Page loaded, initializing...');
+
+    // Store QR canvases for download
+    window.qrCanvases = {};
+
+    // Load QR codes for all sessions
+    {% for session in active_sessions %}
+    debugLog('Loading QR for session {{ session.id }}');
+    loadQRCode('{{ session.id }}', '{{ session.attendance_code.code }}');
+    {% endfor %}
+
+    // Update countdown timers
+    updateAllCountdowns();
+    setInterval(updateAllCountdowns, 6000);
+
+    // Auto-refresh attendance every 60 seconds
+    startAttendanceRefresh();
+
+    // Show QR in modal on button click
+    document.querySelectorAll('.show-qr-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const sessionId = this.dataset.sessionId;
+            const code = this.dataset.code;
+            const course = this.dataset.course;
+            const sessionNum = this.dataset.sessionNum;
+            const expiresAt = this.dataset.expires;
+            debugLog('Show QR modal for session', sessionId);
+            showQRInModal(sessionId, code, course, sessionNum, expiresAt);
+        });
+    });
+
+    // Copy code functionality
+    document.querySelectorAll('.copy-code-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const code = this.dataset.code;
+            debugLog('Copy code:', code);
+            copyToClipboard(code);
+        });
+    });
+
+    // Download QR functionality
+    document.querySelectorAll('.download-qr-btn').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const sessionId = this.dataset.sessionId;
+            debugLog('Download QR for session', sessionId);
+            downloadQR(sessionId);
+        });
+    });
+
+    // Log all session IDs
+    const sessionIds = [{% for session in active_sessions %}'{{ session.id }}'{% if not forloop.last %},{% endif %}{% endfor %}];
+    debugLog('Active session IDs:', sessionIds);
+});
+
+let refreshInterval = 60000; // 60 seconds
+let lastRefresh = Date.now();
+let refreshCount = 0;
+
+function startAttendanceRefresh() {
+    debugLog('Starting attendance refresh with interval', refreshInterval, 'ms');
+
+    // Initial update
+    updateAttendanceCounts();
+
+    // Set up interval
+    setInterval(function() {
+        refreshCount++;
+        debugLog(`Auto-refresh #${refreshCount} at`, new Date().toLocaleTimeString());
+        updateAttendanceCounts();
+    }, refreshInterval);
+}
+
+function updateAttendanceCounts() {
+    debugLog('Updating all attendance counts...');
+
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.classList.add('updating');
+    }
+
+    // Get all session IDs from the page
+    const sessionElements = document.querySelectorAll('[id^="count-"]');
+    const sessionIds = [];
+    sessionElements.forEach(el => {
+        const sessionId = el.id.replace('count-', '');
+        sessionIds.push(sessionId);
+    });
+
+    debugLog('Found session IDs:', sessionIds);
+
+    // Track pending requests
+    let pendingRequests = sessionIds.length;
+
+    sessionIds.forEach(sessionId => {
+        fetchAttendanceCount(sessionId).finally(() => {
+            pendingRequests--;
+            if (pendingRequests === 0) {
+                debugLog('All attendance updates completed');
+            }
+        });
+    });
+
+    // Update refresh time
+    lastRefresh = Date.now();
+    updateRefreshTime();
+
+    setTimeout(() => {
+        if (refreshBtn) {
+            refreshBtn.classList.remove('updating');
+        }
+    }, 500);
+}
+
+function fetchAttendanceCount(sessionId) {
+    const url = `/api/session-attendance/${sessionId}/`;
+    debugLog(`Fetching attendance for session ${sessionId} from ${url}`);
+
+    return fetch(url)
+        .then(response => {
+            debugLog(`Response status for session ${sessionId}:`, response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            debugLog(`API response for session ${sessionId}:`, data);
+            if (data.success) {
+                updateAttendanceDisplay(sessionId, data.count, data.percentage);
+            } else {
+                console.error('API returned error:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error(`Error fetching attendance for session ${sessionId}:`, error);
+            // Show error in UI temporarily
+            const sessionCard = document.getElementById(`session-card-${sessionId}`);
+            if (sessionCard) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger mt-2';
+                errorDiv.textContent = `Failed to update: ${error.message}`;
+                errorDiv.style.fontSize = '0.8em';
+                errorDiv.style.padding = '5px';
+                sessionCard.appendChild(errorDiv);
+                setTimeout(() => errorDiv.remove(), 3000);
+            }
+        });
+}
+
+function updateAttendanceDisplay(sessionId, count, percentage) {
+    debugLog(`Updating display for session ${sessionId}: count=${count}, percentage=${percentage}`);
+
+    // Update counter
+    const countElement = document.getElementById(`count-${sessionId}`);
+    if (countElement) {
+        const oldValue = countElement.textContent;
+        countElement.textContent = count;
+        debugLog(`Counter updated: ${oldValue} -> ${count}`);
+    } else {
+        console.warn(`Count element not found for session ${sessionId}`);
+    }
+
+    // Update progress bar
+    const progressBar = document.getElementById(`progress-bar-${sessionId}`);
+    if (progressBar) {
+        const oldWidth = progressBar.style.width;
+        progressBar.style.width = percentage + '%';
+        progressBar.setAttribute('aria-valuenow', count);
+        debugLog(`Progress bar updated: ${oldWidth} -> ${percentage}%`);
+    } else {
+        console.warn(`Progress bar not found for session ${sessionId}`);
+    }
+
+    // Update progress text
+    const progressText = document.getElementById(`progress-text-${sessionId}`);
+    if (progressText) {
+        const oldText = progressText.textContent;
+        progressText.textContent = count + ' students';
+        debugLog(`Progress text updated: ${oldText} -> ${count} students`);
+    }
+
+    // Update attendance counter badge
+    const counterBadge = document.getElementById(`attendance-count-${sessionId}`);
+    if (counterBadge) {
+        counterBadge.innerHTML = `<i class="bi bi-people"></i> <span id="count-${sessionId}">${count}</span> Present`;
+    }
+
+    // Update modal if open for this session
+    if (window.currentModalSessionId === sessionId) {
+        const modalAttendance = document.getElementById('modalAttendance');
+        if (modalAttendance) {
+            modalAttendance.innerHTML = `<i class="bi bi-people"></i> ${count} students marked present`;
+        }
+    }
+}
+
+function updateRefreshTime() {
+    const refreshTime = document.getElementById('refreshTime');
+    if (!refreshTime) return;
+
+    refreshTime.textContent = 'just now';
+
+    setTimeout(() => {
+        const seconds = Math.floor((Date.now() - lastRefresh) / 1000);
+        refreshTime.textContent = seconds + 's ago';
+    }, 1000);
+}
+
+function refreshAllAttendance() {
+    debugLog('Manual refresh triggered');
+    updateAttendanceCounts();
+}
+
+function loadQRCode(sessionId, code) {
+    const container = document.getElementById(`qr-${sessionId}`);
+    if (!container) {
+        console.warn(`QR container not found for session ${sessionId}`);
+        return;
+    }
+
+    QRCode.toCanvas(code, {
+        width: 150,
+        margin: 1,
+        color: {
+            dark: '#007bff',
+            light: '#ffffff'
+        }
+    }, function(error, canvas) {
+        if (error) {
+            console.error('Error loading QR code:', error);
+            container.innerHTML = '<p class="text-danger">Error loading QR</p>';
+        } else {
+            container.innerHTML = '';
+            canvas.style.width = '100%';
+            canvas.style.height = 'auto';
+            canvas.style.maxWidth = '150px';
+            container.appendChild(canvas);
+
+            // Store canvas for download
+            window.qrCanvases[sessionId] = canvas;
+            debugLog(`QR code loaded for session ${sessionId}`);
+        }
+    });
+}
+
+function showQRInModal(sessionId, code, course, sessionNum, expiresAt) {
+    const modal = new bootstrap.Modal(document.getElementById('qrModal'));
+    const modalQR = document.getElementById('modalQRCode');
+    const modalCode = document.getElementById('modalCode');
+    const modalCourse = document.getElementById('modalCourse');
+    const modalExpiry = document.getElementById('modalExpiry');
+    const modalCountdown = document.getElementById('modalCountdown');
+    const modalAttendance = document.getElementById('modalAttendance');
+
+    window.currentModalSessionId = sessionId;
+    modalQR.innerHTML = '<div class="spinner-border text-primary" role="status"></div>';
+    modal.show();
+
+    // Format expiry date
+    const expiryDate = new Date(expiresAt);
+    const formattedExpiry = expiryDate.toLocaleString();
+
+    // Get current attendance count
+    const currentCount = document.getElementById(`count-${sessionId}`).textContent;
+    modalAttendance.innerHTML = `<i class="bi bi-people"></i> ${currentCount} students marked present`;
+
+    QRCode.toCanvas(code, {
+        width: 250,
+        margin: 2,
+        color: {
+            dark: '#007bff',
+            light: '#ffffff'
+        }
+    }, function(error, canvas) {
+        if (error) {
+            console.error('Error generating QR for modal:', error);
+            modalQR.innerHTML = '<p class="text-danger">Error generating QR</p>';
+        } else {
+            modalQR.innerHTML = '';
+            canvas.style.width = '100%';
+            canvas.style.height = 'auto';
+            canvas.style.maxWidth = '250px';
+            modalQR.appendChild(canvas);
+            
+            // Set modal content
+            modalCode.innerHTML = `<strong>Code:</strong> ${code}`;
+            modalCourse.innerHTML = `<strong>${course}</strong> - Session ${sessionNum}`;
+            modalExpiry.innerHTML = `<i class="bi bi-clock"></i> Expires: ${formattedExpiry}`;
+            
+            // Store for copy/download functions
+            window.modalQRCode = code;
+            window.modalQRCanvas = canvas;
+            window.modalExpiryDate = expiryDate;
+            
+            // Start countdown in modal
+            updateModalCountdown(modalCountdown, expiryDate);
+        }
+    });
+}
+
+function updateModalCountdown(element, expiryDate) {
+    function update() {
+        const now = new Date();
+        const distance = expiryDate - now;
+        
+        if (distance > 0) {
+            const minutes = Math.floor(distance / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            element.innerHTML = `<i class="bi bi-hourglass"></i> ${minutes}m ${seconds}s remaining`;
+            element.style.color = minutes < 5 ? '#dc3545' : '#28a745';
+            setTimeout(update, 1000);
+        } else {
+            element.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Code Expired';
+            element.style.color = '#dc3545';
+        }
+    }
+    update();
+}
+
+function updateAllCountdowns() {
+    document.querySelectorAll('.countdown').forEach(element => {
+        const expiresAt = new Date(element.dataset.expires);
+        const now = new Date();
+        const distance = expiresAt - now;
+        
+        if (distance > 0) {
+            const minutes = Math.floor(distance / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            element.innerHTML = `${minutes}m ${seconds}s remaining`;
+            element.style.color = minutes < 5 ? '#dc3545' : '#28a745';
+        } else {
+            element.innerHTML = 'Expired';
+            element.style.color = '#dc3545';
+        }
+    });
+}
+
+function copyModalCode() {
+    if (window.modalQRCode) {
+        copyToClipboard(window.modalQRCode);
+    }
+}
+
+function downloadModalQR() {
+    if (window.modalQRCanvas) {
+        const link = document.createElement('a');
+        link.download = 'attendance-qr.png';
+        link.href = window.modalQRCanvas.toDataURL();
+        link.click();
+    }
+}
+
+function printModalQR() {
+    if (window.modalQRCanvas && window.modalQRCode) {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Attendance QR Code</title>
+                    <style>
+                        body {
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                            font-family: Arial, sans-serif;
+                        }
+                        .container {
+                            text-align: center;
+                            padding: 20px;
+                        }
+                        img {
+                            max-width: 400px;
+                            width: 100%;
+                            height: auto;
+                        }
+                        .code {
+                            font-size: 24px;
+                            font-weight: bold;
+                            margin: 20px 0 10px;
+                        }
+                        .expiry {
+                            color: #666;
+                            margin-bottom: 10px;
+                        }
+                        .footer {
+                            margin-top: 20px;
+                            font-size: 12px;
+                            color: #999;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <img src="${window.modalQRCanvas.toDataURL()}" />
+                        <div class="code">${window.modalQRCode}</div>
+                        <div class="expiry">Expires: ${window.modalExpiryDate.toLocaleString()}</div>
+                        <div class="footer">Attendance System</div>
+                    </div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 250);
+    }
+}
+
+function downloadQR(sessionId) {
+    if (window.qrCanvases[sessionId]) {
+        const link = document.createElement('a');
+        link.download = `attendance-qr-session-${sessionId}.png`;
+        link.href = window.qrCanvases[sessionId].toDataURL();
+        link.click();
+    }
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Code copied to clipboard!');
+    }, function(err) {
+        console.error('Could not copy text: ', err);
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('Code copied to clipboard!');
+    });
+}
+</script>
+{% endblock %}

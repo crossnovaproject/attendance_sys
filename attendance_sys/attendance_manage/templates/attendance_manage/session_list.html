@@ -1,0 +1,73 @@
+{% extends 'attendance_manage/base.html' %}
+{% load tz %}
+
+{% block title %}Sessions{% endblock %}
+{% block page_title %}Course Sessions Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-calendar-session"></i> All Sessions</h5>
+        <a href="{% url 'attendance_manage:session_create' %}" class="btn btn-light btn-sm">
+            <i class="bi bi-plus-circle"></i> New Session
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Session Code</th>
+                        <th>Course</th>
+                        <th>Session #</th>
+                        <th>Date</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Topic</th>
+                        <th>Status</th>
+                        <th>Attendance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td><code>{{ session.session_code }}</code></td>
+                        <td>{{ session.course.course_name }}</td>
+                        <td>{{ session.session_number }}</td>
+                        <td>{{ session.session_date|date:"Y-m-d" }}</td>
+                        <td>{% if session.start_time %}{{ session.start_time|time:"H:i" }}{% else %}-{% endif %}</td>
+                        <td>{% if session.end_time %}{{ session.end_time|time:"H:i" }}{% else %}-{% endif %}</td>
+                        <td>{{ session.topic|truncatechars:30 }}</td>
+                        <td>
+                            {% if session.is_active %}
+                                <span class="badge bg-success">Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ session.attendance_count }}</span>
+                        </td>
+                        <td>
+                            <a href="{% url 'attendance_manage:session_edit' session.id %}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <a href="{% url 'attendance_manage:session_delete' session.id %}" 
+                               class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center">No sessions found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

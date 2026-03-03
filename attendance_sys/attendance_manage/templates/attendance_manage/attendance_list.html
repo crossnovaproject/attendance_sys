@@ -1,0 +1,161 @@
+{% extends 'attendance_manage/base.html' %}
+{% load tz %}
+
+{% block title %}Attendance Records{% endblock %}
+{% block page_title %}Attendance Records Management{% endblock %}
+
+{% block content %}
+<!-- Filter Form -->
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-filter"></i> Filter Records</h5>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Student ID</label>
+                <input type="text" name="student_id" class="form-control" value="{{ filters.student_id }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Course</label>
+                <select name="course" class="form-select">
+                    <option value="">All Courses</option>
+                    {% for course in courses %}
+                    <option value="{{ course.course_id }}" {% if filters.course == course.course_id %}selected{% endif %}>
+                        {{ course.course_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Session</label>
+                <select name="session" class="form-select">
+                    <option value="">All Sessions</option>
+                    {% for session in sessions %}
+                    <option value="{{ session.id }}" {% if filters.session|stringformat:"i" == session.id|stringformat:"i" %}selected{% endif %}>
+                        Session {{ session.session_number }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Status</option>
+                    {% for status_value, status_label in status_choices %}
+                    <option value="{{ status_value }}" {% if filters.status == status_value %}selected{% endif %}>
+                        {{ status_label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Date From</label>
+                <input type="date" name="date_from" class="form-control" value="{{ filters.date_from }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Date To</label>
+                <input type="date" name="date_to" class="form-control" value="{{ filters.date_to }}">
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search"></i> Apply Filters
+                </button>
+                <a href="{% url 'attendance_manage:attendance_list' %}" class="btn btn-secondary">
+                    <i class="bi bi-eraser"></i> Clear
+                </a>
+                <a href="{% url 'attendance_manage:bulk_attendance_update' %}" class="btn btn-success float-end">
+                    <i class="bi bi-pencil-square"></i> Bulk Update
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Attendance Records Table -->
+<div class="card">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-list-check"></i> Attendance Records ({{ page_obj.paginator.count }})</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Student ID</th>
+                        <th>Course</th>
+                        <th>Session</th>
+                        <th>Status</th>
+                        <th>Check-in Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for attendance in page_obj %}
+                    <tr>
+                        <td>{{ attendance.student.first_name }} {{ attendance.student.last_name }}</td>
+                        <td>{{ attendance.student.student_id }}</td>
+                        <td>{{ attendance.session.course.course_name }}</td>
+                        <td>{{ attendance.session.session_number }}</td>
+                        <td>
+                            <span class="badge 
+                                {% if attendance.status == 'PRESENT' %}bg-success
+                                {% elif attendance.status == 'LATE' %}bg-warning text-dark
+                                {% elif attendance.status == 'ABSENT' %}bg-danger
+                                {% else %}bg-info{% endif %}">
+                                {{ attendance.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ attendance.check_in_time|localtime|date:"Y-m-d H:i:s" }}</td>
+                        <td>
+                            <a href="{% url 'attendance_manage:attendance_edit' attendance.id %}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <a href="{% url 'attendance_manage:attendance_delete' attendance.id %}" 
+                               class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center">No attendance records found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <nav class="mt-3">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">&laquo;</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Previous</a>
+                </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+                
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Next</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">&raquo;</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

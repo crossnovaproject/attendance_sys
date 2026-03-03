@@ -1,0 +1,318 @@
+{% extends 'student_attendance/base.html' %}
+{% load tz %}
+
+{% block title %}Teacher Dashboard{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8">
+            <h2><i class="bi bi-person-badge"></i> Teacher Dashboard</h2>
+            <p class="text-muted">Welcome, {{ teacher.first_name }} {{ teacher.last_name }} ({{ teacher.teacher_id }})</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'student_attendance:generate_attendance_code' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Generate Attendance Code
+            </a>
+            <a href="{% url 'student_attendance:active_sessions' %}" class="btn btn-info">
+                <i class="bi bi-play-circle"></i> Active Sessions
+            </a>
+        </div>
+    </div>
+
+    <!-- Today's Statistics -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-check-circle"></i> Total Present</h5>
+                    <h2>{{ total_present }}</h2>
+                    <small>Today</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-exclamation-triangle"></i> Late</h5>
+                    <h2>{{ total_late }}</h2>
+                    <small>Today</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-clock"></i> Excused</h5>
+                    <h2>{{ total_excused }}</h2>
+                    <small>Today</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="bi bi-people"></i> Total Students</h5>
+                    <h2>{{ total_present|add:total_late|add:total_excused }}</h2>
+                    <small>Today's Attendance</small>
+                    <!-- Add this in the Quick Actions section -->
+                    <div class="col-md-3">
+                        <a href="{% url 'student_attendance:teacher_course_attendance' %}" class="btn btn-outline-info w-100 py-3">
+                            <i class="bi bi-bar-chart-steps fs-4 d-block"></i>
+                            <span>Course Attendance</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <!-- Courses List -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-book"></i> My Courses</h5>
+                    <span class="badge bg-light text-primary">{{ courses|length }} Courses</span>
+                </div>
+                <div class="card-body">
+                    {% if courses %}
+                    <div class="list-group">
+                        {% for course in courses %}
+                        <a href="{% url 'student_attendance:course_dashboard' course.course_id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ course.course_name }}</h6>
+                                <small class="text-muted">{{ course.total_sessions_count }} sessions</small>
+                            </div>
+                            <p class="mb-1 text-muted">{{ course.course_id }}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-primary">{{ course.total_students_count }} students</small>
+                                <span class="badge {% if course.total_sessions_count > 0 %}bg-success{% else %}bg-secondary{% endif %}">
+                                    Active
+                                </span>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-journal-x" style="font-size: 3rem; color: #ccc;"></i>
+                        <p class="text-muted mt-3">No courses assigned yet.</p>
+                        <a href="{% url 'admin:index' %}" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-plus-circle"></i> Add Course
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Sessions -->
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Sessions</h5>
+                    <span class="badge bg-light text-success">{{ recent_sessions|length }} Active</span>
+                </div>
+                <div class="card-body">
+                    {% if recent_sessions %}
+                    <div class="list-group">
+                        {% for session in recent_sessions %}
+                        <a href="{% url 'student_attendance:session_detail' session.id %}" class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">{{ session.course.course_name }}</h6>
+                                <small class="text-muted">{{ session.session_date|date:"M d, Y" }}</small>
+                            </div>
+                            <p class="mb-1">Session {{ session.session_number }}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small>
+                                    <span class="badge bg-primary">Code: {{ session.attendance_code.code }}</span>
+                                </small>
+                                <small class="{% if session.attendance_code.expires_at > now %}text-success{% else %}text-danger{% endif %}">
+                                    <i class="bi bi-clock"></i>
+                                    Expires: {{ session.attendance_code.expires_at|localtime|time:"H:i" }}
+                                </small>
+                            </div>
+                            {% if session.attendance_code.expires_at > now %}
+                            <div class="progress mt-2" style="height: 5px;">
+                                <div class="progress-bar bg-success" role="progressbar"
+                                     style="width: {{ session.attendance_code.expires_at|timeuntil:now }}%"></div>
+                            </div>
+                            {% endif %}
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-calendar-x" style="font-size: 3rem; color: #ccc;"></i>
+                        <p class="text-muted mt-3">No recent sessions.</p>
+                        <a href="{% url 'student_attendance:generate_attendance_code' %}" class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-plus-circle"></i> Generate First Code
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats Row -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> Quick Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <h3 class="text-primary">{{ total_courses|default:courses|length }}</h3>
+                                <small>Total Courses</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <h3 class="text-success">{{ total_students|default:"0" }}</h3>
+                                <small>Total Students</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <h3 class="text-info">{{ total_sessions|default:"0" }}</h3>
+                                <small>Total Sessions</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-3">
+                                <h3 class="text-warning">{{ total_attendance|default:"0" }}</h3>
+                                <small>Total Attendances</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <a href="{% url 'student_attendance:generate_attendance_code' %}" class="btn btn-outline-primary w-100 py-3">
+                                <i class="bi bi-qr-code fs-4 d-block"></i>
+                                <span>Generate Code</span>
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{% url 'student_attendance:active_sessions' %}" class="btn btn-outline-success w-100 py-3">
+                                <i class="bi bi-play-circle fs-4 d-block"></i>
+                                <span>Active Sessions</span>
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{% url 'student_attendance:attendance_reports' %}" class="btn btn-outline-info w-100 py-3">
+                                <i class="bi bi-bar-chart fs-4 d-block"></i>
+                                <span>Reports</span>
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{% url 'admin:index' %}" class="btn btn-outline-secondary w-100 py-3">
+                                <i class="bi bi-gear fs-4 d-block"></i>
+                                <span>Admin Panel</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Today's Schedule (Optional) -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-calendar-day"></i> Today's Schedule ({{ today|date:"l, F d, Y" }})</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Course</th>
+                                    <th>Session</th>
+                                    <th>Status</th>
+                                    <th>Attendance</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in today_sessions %}
+                                <tr>
+                                    <td>{{ session.start_time|time:"H:i" }} - {{ session.end_time|time:"H:i" }}</td>
+                                    <td>{{ session.course.course_name }}</td>
+                                    <td>Session {{ session.session_number }}</td>
+                                    <td>
+                                        {% if session.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% with count=session.attendance_logs.count %}
+                                        <span class="badge bg-info">{{ count }} students</span>
+                                        {% endwith %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'student_attendance:session_detail' session.id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        No sessions scheduled for today
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Chart.js for graphs (optional) -->
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // You can add charts here if needed
+    // Example: Attendance trend chart
+
+    // Refresh data every 30 seconds (optional)
+    setTimeout(function() {
+        location.reload();
+    }, 30000); // 30 seconds
+});
+
+// Tooltip initialization
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl)
+});
+</script>
+{% endblock %}
+{% endblock %}

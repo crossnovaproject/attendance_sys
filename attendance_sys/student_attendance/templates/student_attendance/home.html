@@ -1,0 +1,104 @@
+{% extends 'student_attendance/base.html' %}
+
+{% block title %}Home - Attendance System{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-12 text-center">
+            <h1 class="display-4">Welcome to Attendance System</h1>
+            <p class="lead">Efficiently manage and track student attendance</p>
+            <hr class="my-4">
+        </div>
+    </div>
+
+    <div class="row mt-5">
+        <div class="col-md-6">
+            <div class="card attendance-card">
+                <div class="card-body text-center">
+                    <i class="bi bi-person-badge display-1 text-primary"></i>
+                    <h3 class="card-title mt-3">Teacher Portal</h3>
+                    <p class="card-text">Generate attendance codes, view sessions, and manage attendance records.</p>
+                    <a href="{% url 'student_attendance:teacher_dashboard' %}" class="btn btn-primary btn-lg">
+                        <i class="bi bi-arrow-right"></i> Go to Teacher Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card attendance-card">
+                <div class="card-body text-center">
+                    <i class="bi bi-person display-1 text-success"></i>
+                    <h3 class="card-title mt-3">Student Portal</h3>
+                    <p class="card-text">Mark your attendance and view your attendance history.</p>
+                    <a href="{% url 'student_attendance:mark_attendance' %}" class="btn btn-success btn-lg">
+                        <i class="bi bi-arrow-right"></i> Mark Attendance
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-3">
+        <div class="col-md-12 text-center">
+            <a href="{% url 'attendance_manage:dashboard' %}" class="btn btn-danger btn-lg">
+                <i class="bi bi-shield-lock"></i> Admin Management Portal
+            </a>
+            <p class="text-muted mt-2"><small>Access to manage attendance records and sessions (Admin only)</small></p>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Quick Guide</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6><i class="bi bi-1-circle-fill text-primary"></i> For Teachers</h6>
+                            <ul>
+                                <li>Generate unique attendance codes for each session</li>
+                                <li>Monitor active sessions in real-time</li>
+                                <li>View detailed attendance reports</li>
+                                <li>Track student attendance patterns</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6><i class="bi bi-2-circle-fill text-success"></i> For Students</h6>
+                            <ul>
+                                <li>Enter attendance code to mark presence</li>
+                                <li>View personal attendance history</li>
+                                <li>Track attendance percentage per course</li>
+                                <li>Receive attendance confirmation</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6><i class="bi bi-3-circle-fill text-warning"></i> Features</h6>
+                            <ul>
+                                <li>QR code support for easy scanning</li>
+                                <li>Real-time attendance validation</li>
+                                <li>Comprehensive reporting</li>
+                                <li>Mobile-responsive design</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Login Status (optional) -->
+    {% if not user.is_authenticated %}
+    <div class="row mt-4">
+        <div class="col-md-12 text-center">
+            <p class="text-muted">
+                <i class="bi bi-shield-lock"></i>
+                Admin access requires staff privileges.
+                <a href="{% url 'student_attendance:login' %}">Login here</a>
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

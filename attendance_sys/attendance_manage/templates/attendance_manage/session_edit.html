@@ -1,0 +1,79 @@
+{% extends 'attendance_manage/base.html' %}
+
+{% block title %}Edit Session{% endblock %}
+{% block page_title %}Edit Course Session{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pencil"></i> Edit Session: {{ session.session_code }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Course</label>
+                        <input type="text" class="form-control" value="{{ session.course.course_name }}" readonly disabled>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Session Number</label>
+                        <input type="text" class="form-control" value="{{ session.session_number }}" readonly disabled>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Session Code</label>
+                        <input type="text" class="form-control" value="{{ session.session_code }}" readonly disabled>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Session Date</label>
+                            <input type="date" name="session_date" class="form-control" 
+                                   value="{{ session.session_date|date:'Y-m-d' }}" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Start Time</label>
+                            <input type="time" name="start_time" class="form-control" 
+                                   value="{{ session.start_time|time:'H:i' }}">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">End Time</label>
+                            <input type="time" name="end_time" class="form-control" 
+                                   value="{{ session.end_time|time:'H:i' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Topic</label>
+                        <input type="text" name="topic" class="form-control" value="{{ session.topic }}">
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" name="is_active" class="form-check-input" id="isActive" 
+                               {% if session.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="isActive">Session is Active</label>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Created At</label>
+                        <input type="text" class="form-control bg-light" value="{{ session.created_at }}" readonly disabled>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{% url 'attendance_manage:session_list' %}" class="btn btn-secondary">
+                            <i class="bi bi-x"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" type="text/css" href="{% static "admin/css/dashboard.css" %}">{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; Attendance Summary
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module">
+        <h2>Attendance Summary</h2>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; padding: 20px;">
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
+                <h3 style="margin: 0; color: #007bff;">{{ total_students }}</h3>
+                <p style="margin: 5px 0 0; color: #6c757d;">Total Students</p>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
+                <h3 style="margin: 0; color: #28a745;">{{ total_teachers }}</h3>
+                <p style="margin: 5px 0 0; color: #6c757d;">Total Teachers</p>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
+                <h3 style="margin: 0; color: #17a2b8;">{{ total_courses }}</h3>
+                <p style="margin: 5px 0 0; color: #6c757d;">Total Courses</p>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
+                <h3 style="margin: 0; color: #ffc107;">{{ total_attendances }}</h3>
+                <p style="margin: 5px 0 0; color: #6c757d;">Total Attendances</p>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center;">
+                <h3 style="margin: 0; color: #dc3545;">{{ today_attendances }}</h3>
+                <p style="margin: 5px 0 0; color: #6c757d;">Today's Attendances</p>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px;">
+            <h3>Quick Actions</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="{% url 'admin:export-data' %}" class="button" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 4px;">
+                    Export Data
+                </a>
+                <a href="{% url 'admin:student_attendance_attendancelog_changelist' %}" class="button" style="padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 4px;">
+                    View All Attendances
+                </a>
+                <a href="{% url 'admin:student_attendance_attendancecode_add' %}" class="button" style="padding: 10px 20px; background: #ffc107; color: black; text-decoration: none; border-radius: 4px;">
+                    Generate New Code
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+    <div class="module" id="recent-actions-module">
+        <h2>{% trans 'Recent actions' %}</h2>
+        <h3>{% trans 'My actions' %}</h3>
+            {% load log %}
+            {% get_admin_log 10 as admin_log for_user user %}
+            {% if not admin_log %}
+            <p>{% trans 'None available' %}</p>
+            {% else %}
+            <ul class="actionlist">
+            {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+                {% else %}
+                    <span class="mini quiet">{% trans 'Unknown content' %}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+    </div>
+</div>
+{% endblock %}

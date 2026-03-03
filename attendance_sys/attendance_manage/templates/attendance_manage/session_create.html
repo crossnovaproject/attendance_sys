@@ -1,0 +1,75 @@
+{% extends 'attendance_manage/base.html' %}
+
+{% block title %}Create Session{% endblock %}
+{% block page_title %}Create New Course Session{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-plus-circle"></i> New Session</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Course</label>
+                        <select name="course" class="form-select" required>
+                            <option value="">Select Course...</option>
+                            {% for course in courses %}
+                            <option value="{{ course.course_id }}">
+                                {{ course.course_name }} ({{ course.course_id }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Session Number</label>
+                        <input type="number" name="session_number" class="form-control" 
+                               min="1" required placeholder="e.g., 1, 2, 3...">
+                        <div class="form-text">Enter the session number for this course</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Session Date</label>
+                            <input type="date" name="session_date" class="form-control" 
+                                   value="{% now 'Y-m-d' %}" required>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Start Time</label>
+                            <input type="time" name="start_time" class="form-control" value="09:00">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">End Time</label>
+                            <input type="time" name="end_time" class="form-control" value="10:00">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Topic</label>
+                        <input type="text" name="topic" class="form-control" placeholder="Session topic">
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" name="is_active" class="form-check-input" id="isActive" checked>
+                        <label class="form-check-label" for="isActive">Session is Active</label>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{% url 'attendance_manage:session_list' %}" class="btn btn-secondary">
+                            <i class="bi bi-x"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-plus-circle"></i> Create Session
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" type="text/css" href="{% static "admin/css/forms.css" %}">{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; Export Data
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <form method="post" action="">
+        {% csrf_token %}
+        <div class="module">
+            <h2>Export Attendance Data</h2>
+            
+            <div style="padding: 20px;">
+                <fieldset class="module aligned">
+                    <div class="form-row">
+                        <label for="data_type">Data Type:</label>
+                        <select name="data_type" id="data_type">
+                            <option value="attendance_logs">Attendance Logs</option>
+                            <option value="students">Students</option>
+                            <option value="courses">Courses</option>
+                            <option value="sessions">Sessions</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <label for="date_from">Date From:</label>
+                        <input type="date" name="date_from" id="date_from">
+                    </div>
+                    
+                    <div class="form-row">
+                        <label for="date_to">Date To:</label>
+                        <input type="date" name="date_to" id="date_to">
+                    </div>
+                    
+                    <div class="form-row">
+                        <label for="format">Export Format:</label>
+                        <select name="format" id="format">
+                            <option value="csv">CSV</option>
+                            <option value="excel">Excel</option>
+                            <option value="json">JSON</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <label>Include Headers:</label>
+                        <input type="checkbox" name="headers" checked> Yes
+                    </div>
+                </fieldset>
+                
+                <div class="submit-row" style="padding-top: 20px;">
+                    <input type="submit" value="Export Data" class="default">
+                    <a href="{% url 'admin:index' %}" class="button">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

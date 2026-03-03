@@ -1,0 +1,93 @@
+{% extends 'student_attendance/base.html' %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center py-3">
+                    <h4 class="mb-0"><i class="bi bi-box-arrow-in-right"></i> Login</h4>
+                </div>
+                <div class="card-body p-4">
+                    <!-- Debug info - remove in production -->
+                    {% if debug %}
+                    <div class="alert alert-info small">
+                        <strong>Debug:</strong> CSRF token is included in form
+                    </div>
+                    {% endif %}
+
+                    <form method="post" action="{% url 'student_attendance:login' %}" novalidate>
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                <input type="text" class="form-control" id="username" name="username"
+                                       placeholder="Enter your username" required autofocus>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control" id="password" name="password"
+                                       placeholder="Enter your password" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Login as:</label>
+                            <div class="d-flex gap-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="user_type"
+                                           id="teacher" value="teacher" checked>
+                                    <label class="form-check-label" for="teacher">
+                                        <i class="bi bi-person-badge"></i> Teacher
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="user_type"
+                                           id="student" value="student">
+                                    <label class="form-check-label" for="student">
+                                        <i class="bi bi-person"></i> Student
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-box-arrow-in-right"></i> Login
+                            </button>
+                        </div>
+
+                        <!-- Hidden fields to ensure CSRF token is sent -->
+                        <input type="hidden" name="next" value="{{ next }}">
+                    </form>
+
+                    <hr class="my-4">
+
+                    <div class="text-center">
+                        <p class="mb-2">Don't have an account?</p>
+                        <a href="{% url 'student_attendance:register' %}" class="btn btn-outline-success">
+                            <i class="bi bi-person-plus"></i> Register here
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Help card -->
+                <div class="card-footer bg-light text-muted small">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Demo credentials:</strong><br>
+                    Teacher: username: john.doe / password: password123<br>
+                    Student: username: jane.smith / password: password123
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

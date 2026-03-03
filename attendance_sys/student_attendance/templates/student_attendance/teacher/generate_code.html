@@ -1,0 +1,496 @@
+{% extends 'student_attendance/base.html' %}
+{% load tz %}
+
+{% block title %}Generate Attendance Code{% endblock %}
+
+{% block extra_css %}
+<style>
+    .qr-code-container {
+        background: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+    #qr-code {
+        margin: 20px auto;
+        max-width: 300px;
+    }
+    .code-display {
+        font-size: 2.5em;
+        font-weight: bold;
+        letter-spacing: 5px;
+        color: #007bff;
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        border: 2px dashed #007bff;
+        margin: 20px 0;
+    }
+    .countdown {
+        font-size: 1.2em;
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .session-info {
+        background: #e3f2fd;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 20px 0;
+    }
+    .validation-hint {
+        font-size: 0.9em;
+        margin-top: 5px;
+    }
+    .text-danger {
+        color: #dc3545;
+    }
+    .text-success {
+        color: #28a745;
+    }
+    .session-details {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 10px 15px;
+        margin-bottom: 15px;
+        border-radius: 4px;
+    }
+    .session-details p {
+        margin-bottom: 5px;
+    }
+    .session-details strong {
+        color: #007bff;
+    }
+    .session-option {
+        padding: 8px 12px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    .session-option:last-child {
+        border-bottom: none;
+    }
+    .session-option:hover {
+        background-color: #f8f9fa;
+    }
+    .session-time {
+        font-size: 0.9em;
+        color: #6c757d;
+    }
+    .loading-spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'student_attendance:teacher_dashboard' %}">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Generate Attendance Code</li>
+                </ol>
+            </nav>
+
+            <h2><i class="bi bi-qr-code"></i> Generate Attendance Code</h2>
+            <p class="text-muted">Create a new attendance code for an existing course session</p>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Create New Code</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'student_attendance:generate_attendance_code' %}" id="codeForm" novalidate>
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label for="course_id" class="form-label">Select Course</label>
+                            <select class="form-select" id="course_id" name="course_id" required>
+                                <option value="">Choose a course...</option>
+                                {% for course in courses %}
+                                <option value="{{ course.course_id }}"
+                                        data-total-sessions="{{ course.total_sessions }}">
+                                    {{ course.course_name }} ({{ course.course_id }}) -
+                                    {{ course.total_sessions }} sessions
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Select the course for this attendance code</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="session_number" class="form-label">Select Session</label>
+                            <select class="form-select" id="session_number" name="session_number" required disabled>
+                                <option value="">First select a course...</option>
+                            </select>
+                            <div class="validation-hint" id="sessionHint">
+                                <i class="bi bi-info-circle"></i>
+                                Select a course first to see available sessions
+                            </div>
+                            <div class="invalid-feedback" id="sessionError"></div>
+                        </div>
+
+                        <!-- Session Info Display -->
+                        <div class="session-details" id="sessionInfo" style="display: none;">
+                            <h6><i class="bi bi-calendar-event"></i> Selected Session Details:</h6>
+                            <p><strong>Date:</strong> <span id="displayDate"></span></p>
+                            <p><strong>Start Time:</strong> <span id="displayTime"></span> HKT</p>
+                            <p><strong>Status:</strong> <span id="displayStatus"></span></p>
+                            <p class="text-muted small"><i class="bi bi-info-circle"></i> Session date and time are set by admin and cannot be changed</p>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="duration" class="form-label">Code Duration (minutes after session starts)</label>
+                            <select class="form-select" id="duration" name="duration" required>
+                                <option value="15">15 minutes</option>
+                                <option value="30">30 minutes</option>
+                                <option value="45">45 minutes</option>
+                                <option value="60" selected>60 minutes</option>
+                                <option value="90">90 minutes</option>
+                                <option value="120">120 minutes</option>
+                                <option value="180">180 minutes (3 hours)</option>
+                                <option value="240">240 minutes (4 hours)</option>
+                            </select>
+                            <div class="form-text">How long after the session starts should the code remain valid?</div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100" id="submitBtn" disabled>
+                            <i class="bi bi-qr-code"></i> Generate Code
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Session Guidelines</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            <strong>Sessions must be created first</strong> in the admin panel with their correct start times
+                        </li>
+                        <li class="list-group-item">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            <strong>Code validity</strong> starts from the session's scheduled start time (set by admin)
+                        </li>
+                        <li class="list-group-item">
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                            <strong>Example:</strong> If a session is scheduled for 9 AM with 60 min duration,
+                            the code will be valid from 9:00 AM to 10:00 AM
+                        </li>
+                        <li class="list-group-item">
+                            <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                            <strong>Cannot generate</strong> codes for sessions that don't exist or have no start time
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            {% if last_code %}
+            <div class="qr-code-container" id="qrResult">
+                <h3 class="mb-4">Your Attendance Code</h3>
+
+                <div class="code-display" id="generatedCode">
+                    {{ last_code.code }}
+                </div>
+
+                <div id="qr-code">
+                    <!-- QR code will be generated here -->
+                </div>
+
+                <div class="session-info">
+                    <h5>Session Information</h5>
+                    <p class="mb-1"><strong>Course:</strong> {{ last_code.course_name }}</p>
+                    <p class="mb-1"><strong>Session:</strong> {{ last_code.session_number }}</p>
+                    <p class="mb-1"><strong>Session Date:</strong> {{ last_code.session_date }}</p>
+                    <p class="mb-1"><strong>Session Start:</strong> {{ last_code.session_start_time }} HKT</p>
+                    <p class="mb-1"><strong>Generated:</strong> {{ last_code.created_at|localtime|date:"Y-m-d H:i:s" }}</p>
+                    <p class="mb-1"><strong>Valid From:</strong> {{ last_code.session_start|localtime|date:"Y-m-d H:i:s" }}</p>
+                    <p class="mb-1"><strong>Expires at:</strong> {{ last_code.expires_at|localtime|date:"Y-m-d H:i:s" }}</p>
+                    <p class="mb-1"><strong>Expires in:</strong> <span class="countdown" id="countdown">Calculating...</span></p>
+                </div>
+
+                <div class="btn-group mt-3" role="group">
+                    <button class="btn btn-outline-primary" onclick="copyToClipboard('{{ last_code.code }}')">
+                        <i class="bi bi-clipboard"></i> Copy Code
+                    </button>
+                    <button class="btn btn-outline-success" onclick="downloadQR()">
+                        <i class="bi bi-download"></i> Download QR
+                    </button>
+                    <a href="{% url 'student_attendance:generate_attendance_code' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-plus-circle"></i> Generate New
+                    </a>
+                </div>
+                <p class="text-muted small mt-3">
+                    <i class="bi bi-info-circle"></i>
+                    This code will only be valid during the scheduled session time.
+                </p>
+            </div>
+            {% else %}
+            <div class="qr-code-container">
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-qr-code" style="font-size: 5rem;"></i>
+                    <h4 class="mt-3">Ready to Generate</h4>
+                    <p>Select a course and session to generate a new attendance code</p>
+                    <p class="small text-info">
+                        <i class="bi bi-clock"></i>
+                        Codes are valid from the session's scheduled start time (set by admin)
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // DOM Elements
+    const courseSelect = document.getElementById('course_id');
+    const sessionSelect = document.getElementById('session_number');
+    const sessionHint = document.getElementById('sessionHint');
+    const sessionError = document.getElementById('sessionError');
+    const submitBtn = document.getElementById('submitBtn');
+    const sessionInfo = document.getElementById('sessionInfo');
+    const displayDate = document.getElementById('displayDate');
+    const displayTime = document.getElementById('displayTime');
+    const displayStatus = document.getElementById('displayStatus');
+
+    // Store session data for each course
+    const courseSessions = {};
+
+    // Initialize course data from server
+    {% for course in courses %}
+        courseSessions['{{ course.course_id }}'] = [];
+        {% for session in course.sessions.all %}
+            courseSessions['{{ course.course_id }}'].push({
+                number: {{ session.session_number }},
+                date: '{{ session.session_date|date:"Y-m-d" }}',
+                time: '{{ session.start_time|time:"H:i" }}',
+                local_time: '{{ session.start_time|localtime|time:"H:i" }}',
+                has_start_time: {{ session.start_time|yesno:"true,false" }},
+                is_active: {{ session.is_active|yesno:"true,false" }}
+            });
+        {% endfor %}
+    {% endfor %}
+
+    // Update sessions dropdown when course changes
+    courseSelect.addEventListener('change', function() {
+        const selectedCourse = this.value;
+
+        // Clear session select
+        sessionSelect.innerHTML = '';
+        sessionSelect.disabled = true;
+        submitBtn.disabled = true;
+        sessionInfo.style.display = 'none';
+
+        if (selectedCourse && courseSessions[selectedCourse]) {
+            const sessions = courseSessions[selectedCourse];
+
+            if (sessions.length === 0) {
+                // No sessions for this course
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'No sessions available for this course';
+                option.disabled = true;
+                sessionSelect.appendChild(option);
+                sessionHint.innerHTML = '<i class="bi bi-exclamation-triangle text-warning"></i> No sessions found. Create sessions in admin first.';
+            } else {
+                // Add default option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = 'Choose a session...';
+                sessionSelect.appendChild(defaultOption);
+
+                // Add session options
+                sessions.sort((a, b) => a.number - b.number).forEach(session => {
+                    if (session.has_start_time) {
+                        const option = document.createElement('option');
+                        option.value = session.number;
+                        option.textContent = `Session ${session.number} - ${session.date} at ${session.local_time} HKT`;
+                        if (!session.is_active) {
+                            option.textContent += ' (Inactive)';
+                        }
+                        sessionSelect.appendChild(option);
+                    }
+                });
+
+                sessionSelect.disabled = false;
+                sessionHint.innerHTML = '<i class="bi bi-info-circle"></i> Select a session to generate code';
+            }
+        } else {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'First select a course...';
+            sessionSelect.appendChild(option);
+            sessionHint.innerHTML = '<i class="bi bi-info-circle"></i> Select a course first to see available sessions';
+        }
+    });
+
+    // Update session info when session changes
+    sessionSelect.addEventListener('change', function() {
+        const selectedCourse = courseSelect.value;
+        const selectedSessionNum = parseInt(this.value);
+
+        if (selectedCourse && selectedSessionNum && courseSessions[selectedCourse]) {
+            const session = courseSessions[selectedCourse].find(s => s.number === selectedSessionNum);
+
+            if (session) {
+                // Show session details
+                sessionInfo.style.display = 'block';
+                displayDate.textContent = session.date;
+                displayTime.textContent = session.local_time;
+                displayStatus.textContent = session.is_active ? 'Active' : 'Inactive';
+                displayStatus.className = session.is_active ? 'badge bg-success' : 'badge bg-secondary';
+
+                // Enable submit button
+                submitBtn.disabled = false;
+                sessionError.style.display = 'none';
+            } else {
+                sessionInfo.style.display = 'none';
+                submitBtn.disabled = true;
+            }
+        } else {
+            sessionInfo.style.display = 'none';
+            submitBtn.disabled = true;
+        }
+    });
+
+    // Form submission validation
+    document.getElementById('codeForm').addEventListener('submit', function(e) {
+        const selectedCourse = courseSelect.value;
+        const selectedSession = sessionSelect.value;
+
+        if (!selectedCourse) {
+            e.preventDefault();
+            alert('Please select a course');
+            return false;
+        }
+
+        if (!selectedSession) {
+            e.preventDefault();
+            alert('Please select a session');
+            return false;
+        }
+
+        return true;
+    });
+
+    {% if last_code %}
+    // Generate QR code
+    const code = '{{ last_code.code }}';
+    generateQRCode(code);
+
+    // Use timestamp for more reliable countdown
+    const expiryTimestamp = {{ last_code.expires_timestamp }};
+    startCountdown(expiryTimestamp);
+    {% endif %}
+});
+
+function generateQRCode(code) {
+    const qrContainer = document.getElementById('qr-code');
+    qrContainer.innerHTML = '';
+
+    QRCode.toCanvas(code, {
+        width: 250,
+        margin: 2,
+        color: {
+            dark: '#007bff',
+            light: '#ffffff'
+        }
+    }, function(error, canvas) {
+        if (error) {
+            console.error(error);
+            qrContainer.innerHTML = '<p class="text-danger">Error generating QR code</p>';
+        } else {
+            qrContainer.appendChild(canvas);
+        }
+    });
+}
+
+function startCountdown(expiryTimestamp) {
+    const countdownElement = document.getElementById('countdown');
+    if (!countdownElement) return;
+
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const distance = expiryTimestamp - now;
+
+        if (distance > 0) {
+            const hours = Math.floor(distance / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            let timeString = '';
+            if (hours > 0) {
+                timeString = `${hours}h ${minutes}m ${seconds}s`;
+            } else {
+                timeString = `${minutes}m ${seconds}s`;
+            }
+
+            countdownElement.textContent = timeString;
+
+            if (hours === 0 && minutes < 5) {
+                countdownElement.style.color = '#dc3545';
+                countdownElement.style.fontWeight = 'bold';
+            } else {
+                countdownElement.style.color = ''; // Reset to default
+            }
+
+            setTimeout(updateCountdown, 1000);
+        } else {
+            countdownElement.innerHTML = '<span class="text-danger">Expired!</span>';
+        }
+    }
+
+    updateCountdown();
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        alert('Code copied to clipboard!');
+    }, function(err) {
+        console.error('Could not copy text: ', err);
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('Code copied to clipboard!');
+    });
+}
+
+function downloadQR() {
+    const canvas = document.querySelector('#qr-code canvas');
+    if (canvas) {
+        const link = document.createElement('a');
+        link.download = 'attendance-qr.png';
+        link.href = canvas.toDataURL();
+        link.click();
+    }
+}
+</script>
+{% endblock %}

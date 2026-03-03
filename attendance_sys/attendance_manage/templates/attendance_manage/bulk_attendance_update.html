@@ -1,0 +1,106 @@
+{% extends 'attendance_manage/base.html' %}
+
+{% block title %}Bulk Attendance Update{% endblock %}
+{% block page_title %}Bulk Attendance Update{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Bulk Update Attendance</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" id="bulkForm">
+                    {% csrf_token %}
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Select Session</label>
+                            <select name="session" class="form-select" required id="sessionSelect">
+                                <option value="">Choose session...</option>
+                                {% for session in sessions %}
+                                <option value="{{ session.id }}">
+                                    {{ session.course.course_name }} - Session {{ session.session_number }} ({{ session.session_date|date:"Y-m-d" }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Set Status</label>
+                            <select name="status" class="form-select" required>
+                                {% for status_value, status_label in status_choices %}
+                                <option value="{{ status_value }}">{{ status_label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="button" class="btn btn-success" onclick="selectAll()">
+                                <i class="bi bi-check-all"></i> Select All
+                            </button>
+                            <button type="button" class="btn btn-secondary ms-2" onclick="deselectAll()">
+                                <i class="bi bi-x"></i> Deselect All
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <h6 class="mb-0">Select Students</h6>
+                                </div>
+                                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                                    <div class="row">
+                                        {% for student in students %}
+                                        <div class="col-md-3 mb-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input student-checkbox" type="checkbox" 
+                                                       name="students" value="{{ student.id }}" id="student{{ student.id }}">
+                                                <label class="form-check-label" for="student{{ student.id }}">
+                                                    {{ student.first_name }} {{ student.last_name }}
+                                                    <br><small class="text-muted">{{ student.student_id }}</small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end mt-3">
+                        <a href="{% url 'attendance_manage:attendance_list' %}" class="btn btn-secondary">
+                            <i class="bi bi-x"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Update Selected
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectAll() {
+    document.querySelectorAll('.student-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deselectAll() {
+    document.querySelectorAll('.student-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+// Optional: Filter students by session
+document.getElementById('sessionSelect').addEventListener('change', function() {
+    // You could add AJAX here to show only enrolled students for selected session
+    console.log('Session selected:', this.value);
+});
+</script>
+{% endblock %}

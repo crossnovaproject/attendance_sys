@@ -1,0 +1,81 @@
+{% extends 'attendance_manage/base.html' %}
+{% load tz %}
+
+{% block title %}Edit Attendance{% endblock %}
+{% block page_title %}Edit Attendance Record{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-pencil"></i> Edit Attendance</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>Student:</strong> {{ attendance.student.first_name }} {{ attendance.student.last_name }} ({{ attendance.student.student_id }})<br>
+                    <strong>Course:</strong> {{ attendance.session.course.course_name }} - Session {{ attendance.session.session_number }}<br>
+                    <strong>Current Status:</strong> 
+                    <span class="badge 
+                        {% if attendance.status == 'PRESENT' %}bg-success
+                        {% elif attendance.status == 'LATE' %}bg-warning text-dark
+                        {% elif attendance.status == 'ABSENT' %}bg-danger
+                        {% else %}bg-info{% endif %}">
+                        {{ attendance.get_status_display }}
+                    </span>
+                </div>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Attendance Status</label>
+                        <select name="status" class="form-select" required>
+                            {% for status_value, status_label in status_choices %}
+                            <option value="{{ status_value }}" {% if attendance.status == status_value %}selected{% endif %}>
+                                {{ status_label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Check-in Date</label>
+                            <input type="date" name="check_in_date" class="form-control" 
+                                   value="{{ attendance.check_in_time|localtime|date:'Y-m-d' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Check-in Time</label>
+                            <input type="time" name="check_in_time" class="form-control" 
+                                   value="{{ attendance.check_in_time|localtime|date:'H:i' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" class="form-control" rows="3">{{ attendance.notes }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Additional Info (Read Only)</label>
+                        <div class="form-control bg-light" readonly>
+                            <small>IP: {{ attendance.ip_address|default:"N/A" }}</small><br>
+                            <small>Device: {{ attendance.device_info|truncatechars:100 }}</small>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{% url 'attendance_manage:attendance_list' %}" class="btn btn-secondary">
+                            <i class="bi bi-x"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

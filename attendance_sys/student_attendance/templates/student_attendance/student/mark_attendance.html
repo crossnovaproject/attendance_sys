@@ -1,0 +1,309 @@
+{% extends 'student_attendance/base.html' %}
+
+{% block title %}Mark Attendance{% endblock %}
+
+{% block extra_css %}
+<style>
+    .attendance-container {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+    .code-input {
+        font-size: 2rem;
+        letter-spacing: 10px;
+        text-align: center;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .qr-scanner-area {
+        border: 3px dashed #007bff;
+        border-radius: 10px;
+        padding: 40px;
+        text-align: center;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .qr-scanner-area:hover {
+        background: #e9ecef;
+        border-color: #0056b3;
+    }
+    .scanner-icon {
+        font-size: 4rem;
+        color: #007bff;
+    }
+    #video-preview {
+        width: 100%;
+        max-width: 400px;
+        border-radius: 10px;
+        display: none;
+    }
+    .attendance-status {
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+    }
+    .status-success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+    .status-error {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+    }
+    .status-warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+    }
+    .recent-attendance {
+        background: white;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="attendance-container">
+        <div class="text-center mb-4">
+            <h2><i class="bi bi-calendar-check"></i> Mark Your Attendance</h2>
+            <p class="text-muted">Enter the attendance code provided by your teacher</p>
+        </div>
+        
+        <!-- Alert Messages -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        <!-- Attendance Form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="post" action="{% url 'student_attendance:mark_attendance' %}" id="attendanceForm">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="student_id" class="form-label">Your Student ID</label>
+                        <input type="text" class="form-control" id="student_id" name="student_id" 
+                               placeholder="e.g., STU-2024-0001" required>
+                        <div class="form-text">Enter your unique student ID</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="attendance_code" class="form-label">Attendance Code</label>
+                        <input type="text" class="form-control code-input" id="attendance_code" 
+                               name="attendance_code" placeholder="XXXX-XXXX-XXXX" 
+                               style="text-transform: uppercase;" required>
+                        <div class="form-text">Enter the 15-digit attendance code (auto-capitalizes)</div>
+                    </div>
+                    
+                    <!-- QR Scanner Option -->
+                    <div class="mb-3">
+                        <div class="qr-scanner-area" onclick="startQRScanner()" id="scannerArea">
+                            <i class="bi bi-qr-code-scan scanner-icon"></i>
+                            <h5>Click to Scan QR Code</h5>
+                            <p class="text-muted">Use your camera to scan the QR code</p>
+                        </div>
+                        
+                        <!-- Hidden video preview for QR scanning -->
+                        <video id="video-preview" playsinline></video>
+                        <canvas id="qr-canvas" style="display: none;"></canvas>
+                        
+                        <div id="scan-result" class="mt-2"></div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success btn-lg w-100">
+                        <i class="bi bi-check-circle"></i> Submit Attendance
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> How to Mark Attendance</h5>
+            </div>
+            <div class="card-body">
+                <ol class="list-group list-group-numbered">
+                    <li class="list-group-item">Get the attendance code or QR from your teacher</li>
+                    <li class="list-group-item">Enter your student ID exactly as shown on your ID card</li>
+                    <li class="list-group-item">Type the attendance code or scan the QR code</li>
+                    <li class="list-group-item">Click "Submit Attendance" to confirm</li>
+                    <li class="list-group-item">Wait for the success confirmation</li>
+                </ol>
+            </div>
+        </div>
+        
+        <!-- Quick Tips -->
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Note:</strong> Attendance codes expire after the time set by your teacher. 
+            Make sure to mark your attendance before the code expires!
+        </div>
+    </div>
+</div>
+
+<!-- Include QR Scanner Library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script>
+let html5QrcodeScanner = null;
+
+// Auto-capitalize attendance code input
+document.getElementById('attendance_code').addEventListener('input', function(e) {
+    this.value = this.value.toUpperCase();
+});
+
+// Form validation
+document.getElementById('attendanceForm').addEventListener('submit', function(e) {
+    const studentId = document.getElementById('student_id').value;
+    const code = document.getElementById('attendance_code').value;
+    
+    if (!studentId || !code) {
+        e.preventDefault();
+        alert('Please enter both Student ID and Attendance Code');
+        return;
+    }
+    
+    if (code.length < 10) {
+        e.preventDefault();
+        alert('Please enter a valid attendance code');
+        return;
+    }
+});
+
+// QR Code Scanner Function
+function startQRScanner() {
+    const scannerArea = document.getElementById('scannerArea');
+    const videoPreview = document.getElementById('video-preview');
+    
+    scannerArea.style.display = 'none';
+    videoPreview.style.display = 'block';
+    
+    html5QrcodeScanner = new Html5QrcodeScanner(
+        "video-preview", 
+        { fps: 10, qrbox: 250 },
+        /* verbose= */ false
+    );
+    
+    html5QrcodeScanner.render((decodedText, decodedResult) => {
+        // Success callback
+        document.getElementById('attendance_code').value = decodedText;
+        
+        // Show success message
+        const scanResult = document.getElementById('scan-result');
+        scanResult.innerHTML = `
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill"></i>
+                QR Code scanned successfully! Code: ${decodedText}
+                <button type="button" class="btn-close" onclick="stopScanner()"></button>
+            </div>
+        `;
+        
+        // Stop scanner
+        stopScanner();
+        
+    }, (errorMessage) => {
+        // Error callback
+        console.log(errorMessage);
+    });
+}
+
+function stopScanner() {
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear();
+        html5QrcodeScanner = null;
+    }
+    
+    document.getElementById('scannerArea').style.display = 'block';
+    document.getElementById('video-preview').style.display = 'none';
+    document.getElementById('video-preview').innerHTML = '';
+}
+
+// Check for recently marked attendance (could be stored in sessionStorage)
+document.addEventListener('DOMContentLoaded', function() {
+    const lastAttendance = sessionStorage.getItem('lastAttendance');
+    if (lastAttendance) {
+        const data = JSON.parse(lastAttendance);
+        const now = new Date().getTime();
+        
+        // If attendance was marked in the last 5 minutes
+        if (now - data.timestamp < 300000) {
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'recent-attendance';
+            statusDiv.innerHTML = `
+                <h6><i class="bi bi-clock-history"></i> Recent Attendance</h6>
+                <p class="mb-1"><strong>Course:</strong> ${data.course}</p>
+                <p class="mb-1"><strong>Time:</strong> ${data.time}</p>
+                <p class="mb-0 text-success"><i class="bi bi-check-circle"></i> Already marked present</p>
+            `;
+            document.querySelector('.attendance-container').appendChild(statusDiv);
+        } else {
+            sessionStorage.removeItem('lastAttendance');
+        }
+    }
+});
+
+// Clear scanner when page unloads
+window.addEventListener('beforeunload', function() {
+    stopScanner();
+});
+
+// API Validation (Optional - real-time code validation)
+document.getElementById('attendance_code').addEventListener('blur', function() {
+    const code = this.value;
+    if (code.length >= 10) {
+        fetch('/api/validate-code/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({code: code})
+        })
+        .then(response => response.json())
+        .then(data => {
+            const resultDiv = document.getElementById('scan-result');
+            if (data.valid) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle"></i>
+                        Valid code for: ${data.session.course_name} (Session ${data.session.session_number})
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Invalid or expired code
+                    </div>
+                `;
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+});
+</script>
+
+<!-- Sample codes for testing (remove in production) -->
+{% if debug %}
+<div class="container mt-3">
+    <div class="alert alert-secondary">
+        <small><i class="bi bi-bug"></i> Debug Mode - Sample Codes:</small><br>
+        <small>Student ID: STU-2024-0001</small><br>
+        <small>Code Format: COURSE-0001-XXXX (e.g., CS101-0001-A7B9)</small>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
