@@ -88,6 +88,17 @@
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
     }
+    .time-range {
+        background: #f0f7ff;
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin: 10px 0;
+        font-size: 1.1em;
+        border-left: 3px solid #28a745;
+    }
+    .time-range i {
+        color: #28a745;
+    }
 </style>
 {% endblock %}
 
@@ -148,9 +159,14 @@
                         <div class="session-details" id="sessionInfo" style="display: none;">
                             <h6><i class="bi bi-calendar-event"></i> Selected Session Details:</h6>
                             <p><strong>Date:</strong> <span id="displayDate"></span></p>
-                            <p><strong>Start Time:</strong> <span id="displayTime"></span> HKT</p>
+                            <p><strong>Time Range (HKT):</strong> <span id="displayTimeRange"></span></p>
+                            <p><strong>Start:</strong> <span id="displayStartTime"></span> HKT</p>
+                            <p><strong>End:</strong> <span id="displayEndTime"></span> HKT</p>
                             <p><strong>Status:</strong> <span id="displayStatus"></span></p>
-                            <p class="text-muted small"><i class="bi bi-info-circle"></i> Session date and time are set by admin and cannot be changed</p>
+                            <p class="text-muted small mt-2">
+                                <i class="bi bi-info-circle"></i>
+                                Session date and time are set by admin and cannot be changed
+                            </p>
                         </div>
 
                         <div class="mb-3">
@@ -183,16 +199,16 @@
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item">
                             <i class="bi bi-check-circle-fill text-success"></i>
-                            <strong>Sessions must be created first</strong> in the admin panel with their correct start times
+                            <strong>Sessions must be created first</strong> in the admin panel with their correct start and end times
                         </li>
                         <li class="list-group-item">
                             <i class="bi bi-check-circle-fill text-success"></i>
-                            <strong>Code validity</strong> starts from the session's scheduled start time (set by admin)
+                            <strong>Code validity</strong> starts from the session's scheduled start time and lasts for the duration you select
                         </li>
                         <li class="list-group-item">
                             <i class="bi bi-check-circle-fill text-success"></i>
-                            <strong>Example:</strong> If a session is scheduled for 9 AM with 60 min duration,
-                            the code will be valid from 9:00 AM to 10:00 AM
+                            <strong>Example:</strong> If a session is scheduled for 9:00 AM - 11:00 AM with 60 min duration,
+                            the code will be valid from 9:00 AM to 10:00 AM only
                         </li>
                         <li class="list-group-item">
                             <i class="bi bi-exclamation-triangle-fill text-warning"></i>
@@ -220,11 +236,18 @@
                     <h5>Session Information</h5>
                     <p class="mb-1"><strong>Course:</strong> {{ last_code.course_name }}</p>
                     <p class="mb-1"><strong>Session:</strong> {{ last_code.session_number }}</p>
-                    <p class="mb-1"><strong>Session Date:</strong> {{ last_code.session_date }}</p>
-                    <p class="mb-1"><strong>Session Start:</strong> {{ last_code.session_start_time }} HKT</p>
-                    <p class="mb-1"><strong>Generated:</strong> {{ last_code.created_at|localtime|date:"Y-m-d H:i:s" }}</p>
-                    <p class="mb-1"><strong>Valid From:</strong> {{ last_code.session_start|localtime|date:"Y-m-d H:i:s" }}</p>
-                    <p class="mb-1"><strong>Expires at:</strong> {{ last_code.expires_at|localtime|date:"Y-m-d H:i:s" }}</p>
+                    <p class="mb-1"><strong>Date:</strong> {{ last_code.session_date }}</p>
+
+                    <!-- Time Range Display -->
+                    <div class="time-range">
+                        <i class="bi bi-clock-history"></i>
+                        <strong>Session Time (HKT):</strong><br>
+                        {{ last_code.session_start_time }} - {{ last_code.session_end_time }}
+                    </div>
+
+                    <p class="mb-1"><strong>Generated:</strong> {{ last_code.created_at|localtime|date:"Y-m-d H:i:s" }} HKT</p>
+                    <p class="mb-1"><strong>Code Valid From:</strong> {{ last_code.session_start|localtime|date:"Y-m-d H:i:s" }} HKT</p>
+                    <p class="mb-1"><strong>Code Expires:</strong> {{ last_code.expires_at|localtime|date:"Y-m-d H:i:s" }} HKT</p>
                     <p class="mb-1"><strong>Expires in:</strong> <span class="countdown" id="countdown">Calculating...</span></p>
                 </div>
 
@@ -242,6 +265,7 @@
                 <p class="text-muted small mt-3">
                     <i class="bi bi-info-circle"></i>
                     This code will only be valid during the scheduled session time.
+                    Students checking in after the session ends will be marked absent.
                 </p>
             </div>
             {% else %}
@@ -252,7 +276,7 @@
                     <p>Select a course and session to generate a new attendance code</p>
                     <p class="small text-info">
                         <i class="bi bi-clock"></i>
-                        Codes are valid from the session's scheduled start time (set by admin)
+                        Codes are valid from the session's scheduled start time until the duration expires
                     </p>
                 </div>
             </div>
@@ -274,26 +298,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const submitBtn = document.getElementById('submitBtn');
     const sessionInfo = document.getElementById('sessionInfo');
     const displayDate = document.getElementById('displayDate');
-    const displayTime = document.getElementById('displayTime');
+    const displayTimeRange = document.getElementById('displayTimeRange');
+    const displayStartTime = document.getElementById('displayStartTime');
+    const displayEndTime = document.getElementById('displayEndTime');
     const displayStatus = document.getElementById('displayStatus');
 
-    // Store session data for each course
-    const courseSessions = {};
+    // Load pre-formatted session data from Django view - THIS IS THE ONLY SOURCE
+    const courseSessions = {{ course_sessions_json|safe }};
 
-    // Initialize course data from server
-    {% for course in courses %}
-        courseSessions['{{ course.course_id }}'] = [];
-        {% for session in course.sessions.all %}
-            courseSessions['{{ course.course_id }}'].push({
-                number: {{ session.session_number }},
-                date: '{{ session.session_date|date:"Y-m-d" }}',
-                time: '{{ session.start_time|time:"H:i" }}',
-                local_time: '{{ session.start_time|localtime|time:"H:i" }}',
-                has_start_time: {{ session.start_time|yesno:"true,false" }},
-                is_active: {{ session.is_active|yesno:"true,false" }}
-            });
-        {% endfor %}
-    {% endfor %}
+    // Debug: Log the data to console to verify it's correct
+    console.log('Course Sessions Data:', courseSessions);
+
+    // Helper function to check if a time string is valid
+    function isValidTime(timeStr) {
+        return timeStr && timeStr.trim() !== '' && timeStr !== 'Not set' && timeStr !== 'None';
+    }
 
     // Update sessions dropdown when course changes
     courseSelect.addEventListener('change', function() {
@@ -323,12 +342,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 defaultOption.textContent = 'Choose a session...';
                 sessionSelect.appendChild(defaultOption);
 
-                // Add session options
+                // Add session options - using pre-formatted HKT values from JSON
                 sessions.sort((a, b) => a.number - b.number).forEach(session => {
                     if (session.has_start_time) {
                         const option = document.createElement('option');
                         option.value = session.number;
-                        option.textContent = `Session ${session.number} - ${session.date} at ${session.local_time} HKT`;
+
+                        let timeDisplay = '';
+                        if (isValidTime(session.start_time_hkt)) {
+                            if (isValidTime(session.end_time_hkt)) {
+                                timeDisplay = `${session.start_time_hkt} - ${session.end_time_hkt} HKT`;
+                            } else {
+                                timeDisplay = `${session.start_time_hkt} HKT (end time not set)`;
+                            }
+                        } else {
+                            timeDisplay = 'Time not set';
+                        }
+
+                        option.textContent = `Session ${session.number} - ${session.date} | ${timeDisplay}`;
                         if (!session.is_active) {
                             option.textContent += ' (Inactive)';
                         }
@@ -348,7 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Update session info when session changes
+    // Update session info when session changes - using pre-formatted HKT values
     sessionSelect.addEventListener('change', function() {
         const selectedCourse = courseSelect.value;
         const selectedSessionNum = parseInt(this.value);
@@ -360,7 +391,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Show session details
                 sessionInfo.style.display = 'block';
                 displayDate.textContent = session.date;
-                displayTime.textContent = session.local_time;
+
+                // Display time range using pre-formatted HKT values - NO CONVERSION NEEDED
+                if (isValidTime(session.start_time_hkt)) {
+                    if (isValidTime(session.end_time_hkt)) {
+                        displayTimeRange.textContent = `${session.start_time_hkt} - ${session.end_time_hkt} HKT`;
+                        displayStartTime.textContent = session.start_time_hkt;
+                        displayEndTime.textContent = session.end_time_hkt;
+                    } else {
+                        displayTimeRange.textContent = `${session.start_time_hkt} HKT (end time not set)`;
+                        displayStartTime.textContent = session.start_time_hkt;
+                        displayEndTime.textContent = 'Not set';
+                    }
+                } else {
+                    displayTimeRange.textContent = 'Time not set';
+                    displayStartTime.textContent = 'Not set';
+                    displayEndTime.textContent = 'Not set';
+                }
+
                 displayStatus.textContent = session.is_active ? 'Active' : 'Inactive';
                 displayStatus.className = session.is_active ? 'badge bg-success' : 'badge bg-secondary';
 
@@ -408,89 +456,5 @@ document.addEventListener('DOMContentLoaded', function() {
     {% endif %}
 });
 
-function generateQRCode(code) {
-    const qrContainer = document.getElementById('qr-code');
-    qrContainer.innerHTML = '';
-
-    QRCode.toCanvas(code, {
-        width: 250,
-        margin: 2,
-        color: {
-            dark: '#007bff',
-            light: '#ffffff'
-        }
-    }, function(error, canvas) {
-        if (error) {
-            console.error(error);
-            qrContainer.innerHTML = '<p class="text-danger">Error generating QR code</p>';
-        } else {
-            qrContainer.appendChild(canvas);
-        }
-    });
-}
-
-function startCountdown(expiryTimestamp) {
-    const countdownElement = document.getElementById('countdown');
-    if (!countdownElement) return;
-
-    function updateCountdown() {
-        const now = new Date().getTime();
-        const distance = expiryTimestamp - now;
-
-        if (distance > 0) {
-            const hours = Math.floor(distance / (1000 * 60 * 60));
-            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            let timeString = '';
-            if (hours > 0) {
-                timeString = `${hours}h ${minutes}m ${seconds}s`;
-            } else {
-                timeString = `${minutes}m ${seconds}s`;
-            }
-
-            countdownElement.textContent = timeString;
-
-            if (hours === 0 && minutes < 5) {
-                countdownElement.style.color = '#dc3545';
-                countdownElement.style.fontWeight = 'bold';
-            } else {
-                countdownElement.style.color = ''; // Reset to default
-            }
-
-            setTimeout(updateCountdown, 1000);
-        } else {
-            countdownElement.innerHTML = '<span class="text-danger">Expired!</span>';
-        }
-    }
-
-    updateCountdown();
-}
-
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(function() {
-        alert('Code copied to clipboard!');
-    }, function(err) {
-        console.error('Could not copy text: ', err);
-        // Fallback
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        alert('Code copied to clipboard!');
-    });
-}
-
-function downloadQR() {
-    const canvas = document.querySelector('#qr-code canvas');
-    if (canvas) {
-        const link = document.createElement('a');
-        link.download = 'attendance-qr.png';
-        link.href = canvas.toDataURL();
-        link.click();
-    }
-}
 </script>
 {% endblock %}

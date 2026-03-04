@@ -74,13 +74,14 @@
                            href="{% url 'attendance_manage:attendance_list' %}">
                             <i class="bi bi-list-check"></i> Attendance Records
                         </a>
-                        <a class="nav-link {% if request.resolver_match.url_name == 'bulk_attendance_update' %}active{% endif %}"
-                           href="{% url 'attendance_manage:bulk_attendance_update' %}">
-                            <i class="bi bi-pencil-square"></i> Bulk Update
-                        </a>
+<!--                        Temporary disable bulk update function-->
+<!--                        <a class="nav-link {% if request.resolver_match.url_name == 'bulk_attendance_update' %}active{% endif %}"-->
+<!--                           href="{% url 'attendance_manage:bulk_attendance_update' %}">-->
+<!--                            <i class="bi bi-pencil-square"></i> Bulk Update-->
+<!--                        </a>-->
                         <a class="nav-link {% if request.resolver_match.url_name == 'session_list' %}active{% endif %}"
                            href="{% url 'attendance_manage:session_list' %}">
-                            <i class="bi bi-calendar-session"></i> Sessions
+                            <i class="bi bi-list-check"></i> Sessions
                         </a>
                         <a class="nav-link" href="{% url 'admin:index' %}" target="_blank">
                             <i class="bi bi-gear"></i> Django Admin

@@ -215,6 +215,7 @@ def teacher_dashboard(request):
     }
     return render(request, 'student_attendance/teacher/dashboard.html', context)
 
+
 @login_required(login_url='student_attendance:login')
 def generate_attendance_code(request):
     try:
@@ -299,7 +300,39 @@ def generate_attendance_code(request):
             if not created:
                 session.session_date = session_date_obj
                 session.start_time = session_time_obj
-                session.save()
+                # Don't save yet - we'll save after setting end_time
+
+            # ============ Calculate and set end_time ============
+            if session_start_hk:
+                # Calculate end time in Hong Kong using the duration
+                end_time_hk = session_start_hk + timedelta(minutes=duration_minutes)
+
+                # Convert to UTC for storage
+                end_time_utc = end_time_hk.astimezone(dt_timezone.utc)
+
+                # Set the end_time field
+                session.end_time = end_time_utc.time()
+
+                # Debug output (will appear in console)
+                print(f"\n=== SESSION TIME DEBUG ===")
+                print(f"Session ID: {session.id}")
+                print(f"Start HKT: {session_start_hk.strftime('%H:%M')}")
+                print(f"End HKT: {end_time_hk.strftime('%H:%M')}")
+                print(f"Start UTC stored: {session_time_obj.strftime('%H:%M')}")
+                print(f"End UTC stored: {end_time_utc.strftime('%H:%M')}")
+                print(f"==========================\n")
+            elif session.start_time and session.session_date:
+                # Fallback: calculate from stored UTC start time
+                stored_start_utc = timezone.make_aware(
+                    datetime.combine(session.session_date, session.start_time),
+                    dt_timezone.utc
+                )
+                end_time_utc = stored_start_utc + timedelta(minutes=duration_minutes)
+                session.end_time = end_time_utc.time()
+
+            # Save the session with both start_time and end_time
+            session.save()
+            # ============ END NEW CODE ============
 
             # If session already existed but was created manually, ensure it doesn't exceed total
             if not created and session.session_number > course.total_sessions:
@@ -359,9 +392,12 @@ def generate_attendance_code(request):
                 # Format times for display
                 created_local = timezone.localtime(attendance_code.created_at)
 
+                # Get end time in HKT for display in the success message
+                end_time_hkt_display = session.end_time_hkt_str if session.end_time else 'Not set'
+
                 messages.success(
                     request,
-                    f'{attendance_code.code}'
+                    f'✅ Attendance code generated successfully! Code: {attendance_code.code}'
                 )
 
                 # Store additional info in session for the template
@@ -372,13 +408,14 @@ def generate_attendance_code(request):
                     'session_number': session.session_number,
                     'session_date': session_start_local.strftime('%Y-%m-%d'),
                     'session_start_time': session_start_local.strftime('%H:%M'),
+                    'session_end_time': end_time_hkt_display,  # Add end time to display
                     'session_start': session_start_local.isoformat(),
                     'created_at': created_local.isoformat(),
                     'expires_at': expires_local.isoformat(),
                     'expires_timestamp': int(expires_at_utc.timestamp() * 1000),
                     'duration': duration_minutes,
-                    'note': f'Code valid from {session_start_local.strftime("%Y-%m-%d %H:%M")} '
-                            f'to {expires_local.strftime("%Y-%m-%d %H:%M")} (Hong Kong Time)'
+                    'note': f'Session: {session_start_local.strftime("%Y-%m-%d %H:%M")} - {end_time_hkt_display} HKT. '
+                            f'Code valid until {expires_local.strftime("%Y-%m-%d %H:%M")} (Hong Kong Time)'
                 }
 
         except Course.DoesNotExist:
@@ -393,7 +430,23 @@ def generate_attendance_code(request):
         return redirect('student_attendance:generate_attendance_code')
 
     # GET request - show form
-    courses = Course.objects.filter(teacher=teacher)
+    courses = Course.objects.filter(teacher=teacher).prefetch_related('sessions')
+
+    # Create a serializable structure for JavaScript with pre-formatted HKT times
+    course_sessions_data = {}
+    for course in courses:
+        sessions_list = []
+        for session in course.sessions.all():
+            sessions_list.append({
+                'number': session.session_number,
+                'date': session.session_date.strftime('%Y-%m-%d'),
+                'start_time_hkt': session.start_time_hkt_str or '',
+                'end_time_hkt': session.end_time_hkt_str or '',
+                'has_start_time': session.start_time is not None,
+                'has_end_time': session.end_time is not None,
+                'is_active': session.is_active
+            })
+        course_sessions_data[course.course_id] = sessions_list
 
     # Get last generated code from session if exists
     last_code = request.session.get('last_generated_code')
@@ -412,6 +465,7 @@ def generate_attendance_code(request):
 
     context = {
         'courses': courses,
+        'course_sessions_json': json.dumps(course_sessions_data),  # Add this for JavaScript
         'course_data_json': json.dumps(course_data),
         'last_code': last_code,
         'now': timezone.now(),
@@ -424,7 +478,6 @@ def generate_attendance_code(request):
         del request.session['last_generated_code']
 
     return render(request, 'student_attendance/teacher/generate_code.html', context)
-
 
 @login_required(login_url='student_attendance:login')
 def session_attendance_count_api(request, session_id):
@@ -1081,37 +1134,6 @@ def session_detail(request, session_id):
         session=session
     ).select_related('student', 'attendance_code').order_by('-check_in_time')
 
-    # Get the session start time in HKT for calculation
-    hk_tz = timezone.get_current_timezone()  # Asia/Hong_Kong
-
-    if session.start_time and session.session_date:
-        # Create a naive datetime for session start
-        session_start_naive = datetime.combine(session.session_date, session.start_time)
-
-        # IMPORTANT: The stored time is in UTC, so we need to:
-        # 1. First make it aware in UTC
-        session_start_utc = timezone.make_aware(session_start_naive, dt_timezone.utc)
-
-        # 2. Then convert to HKT for display/calculation
-        session_start_hkt = timezone.localtime(session_start_utc, hk_tz)
-    else:
-        session_start_hkt = None
-
-    # Calculate lateness for each attendance log using HKT times
-    for log in attendance_logs:
-        if session_start_hkt and log.check_in_time:
-            # Convert check-in time to HKT
-            check_in_hkt = timezone.localtime(log.check_in_time, hk_tz)
-
-            # Calculate difference in minutes using HKT times
-            time_diff = check_in_hkt - session_start_hkt
-            lateness_minutes = time_diff.total_seconds() / 60
-
-            # Only count positive lateness (can't be early)
-            log.lateness_minutes = round(max(0, lateness_minutes), 1)
-        else:
-            log.lateness_minutes = 0
-
     # Calculate statistics
     total_marked = attendance_logs.count()
     present_count = attendance_logs.filter(status='PRESENT').count()
@@ -1126,7 +1148,7 @@ def session_detail(request, session_id):
     # Calculate attendance rate
     attendance_rate = (total_marked / total_enrolled * 100) if total_enrolled > 0 else 0
 
-    # Calculate average lateness among late students
+    # Calculate average lateness among late students (using the property)
     late_logs = attendance_logs.filter(status='LATE')
     if late_logs.exists():
         avg_lateness = sum([log.lateness_minutes for log in late_logs]) / late_logs.count()
@@ -1136,7 +1158,7 @@ def session_detail(request, session_id):
 
     context = {
         'session': session,
-        'attendance_logs': attendance_logs,
+        'attendance_logs': attendance_logs,  # These objects have .lateness_minutes property
         'enrolled_students': enrolled_students,
         'absent_students': absent_students,
         'total_enrolled': total_enrolled,
@@ -1147,11 +1169,9 @@ def session_detail(request, session_id):
         'excused_count': excused_count,
         'attendance_rate': attendance_rate,
         'avg_lateness': avg_lateness,
-        'session_start_hkt': session_start_hkt,
         'now': timezone.now(),
     }
     return render(request, 'student_attendance/teacher/session_detail.html', context)
-
 
 # Dashboard Views (accessible by teachers)
 @login_required(login_url='student_attendance:login')
@@ -1209,7 +1229,7 @@ def course_dashboard(request, course_id):
         'attendance_matrix': attendance_matrix,
         'total_sessions': total_sessions,
     }
-    return render(request, 'student_attendance/dashboard/course_dashboard.html', context)
+    return render(request, 'student_attendance/teacher/course_dashboard.html', context)
 
 
 @login_required(login_url='student_attendance:login')

@@ -27,7 +27,7 @@ class StudentAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Personal Information', {
-            'fields': ('first_name', 'last_name', 'email')
+            'fields': ('user', 'first_name', 'last_name', 'email')
         }),
         ('System Information', {
             'fields': ('student_id', 'created_at', 'updated_at'),

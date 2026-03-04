@@ -1,5 +1,7 @@
 from django.db import models
-from django.db.models.functions import datetime
+from datetime import datetime
+from django.utils import timezone
+from datetime import timezone as dt_timezone
 from django.utils import timezone
 from django.contrib.auth.models import User
 import random
@@ -160,46 +162,46 @@ class CourseSession(models.Model):
         return f"{self.session_code} - {self.session_date}"
 
     @property
-    def local_start_datetime(self):
-        """Get the session start time converted to local timezone"""
+    def start_time_hkt(self):
+        """Get start time in Hong Kong time"""
         if not self.start_time or not self.session_date:
             return None
 
-        # Create a naive datetime from date and time
-        naive_dt = datetime.combine(self.session_date, self.start_time)
-
-        # IMPORTANT: The time in database is stored as UTC
-        # So we make it aware in UTC first
-        utc_dt = timezone.make_aware(naive_dt, timezone.utc)
-
-        # Then convert to local timezone (Hong Kong)
-        return timezone.localtime(utc_dt)
-
-    @property
-    def local_start_time(self):
-        """Get start time in local timezone (for display)"""
-        local_dt = self.local_start_datetime
-        if local_dt:
-            return local_dt.time()
-        return None
+        try:
+            # Combine date with UTC time
+            naive_dt = datetime.combine(self.session_date, self.start_time)
+            utc_dt = timezone.make_aware(naive_dt, dt_timezone.utc)
+            hk_dt = timezone.localtime(utc_dt)
+            return hk_dt.time()
+        except:
+            return self.start_time
 
     @property
-    def local_start_datetime_str(self):
-        """Get formatted local start datetime for display"""
-        local_dt = self.local_start_datetime
-        if local_dt:
-            return local_dt.strftime('%Y-%m-%d %H:%M:%S')
-        return None
-
-    @property
-    def utc_start_datetime(self):
-        """Get the session start time as UTC datetime (for calculations)"""
-        if not self.start_time or not self.session_date:
+    def end_time_hkt(self):
+        """Get end time in Hong Kong time"""
+        if not self.end_time or not self.session_date:
             return None
 
-        naive_dt = datetime.combine(self.session_date, self.start_time)
-        return timezone.make_aware(naive_dt, timezone.utc)
+        try:
+            # Combine date with UTC time
+            naive_dt = datetime.combine(self.session_date, self.end_time)
+            utc_dt = timezone.make_aware(naive_dt, dt_timezone.utc)
+            hk_dt = timezone.localtime(utc_dt)
+            return hk_dt.time()
+        except:
+            return self.end_time
 
+    @property
+    def start_time_hkt_str(self):
+        """Get formatted start time string"""
+        hk_time = self.start_time_hkt
+        return hk_time.strftime('%H:%M') if hk_time else None
+
+    @property
+    def end_time_hkt_str(self):
+        """Get formatted end time string"""
+        hk_time = self.end_time_hkt
+        return hk_time.strftime('%H:%M') if hk_time else None
 
 class AttendanceCode(models.Model):
     """
@@ -328,7 +330,7 @@ class AttendanceLog(models.Model):
         db_table = 'attendance_log'
         verbose_name_plural = 'Attendance Logs'
         ordering = ['-check_in_time']
-        unique_together = ['student', 'session']  # One attendance per student per session
+        unique_together = ['student', 'session']
         indexes = [
             models.Index(fields=['student', 'session']),
             models.Index(fields=['status', 'check_in_time']),
@@ -337,3 +339,24 @@ class AttendanceLog(models.Model):
 
     def __str__(self):
         return f"{self.student} - {self.session} - {self.status}"
+
+    @property
+    def lateness_minutes(self):
+        """Calculate how late the student was (in minutes)"""
+        if not self.session or not self.session.start_time or not self.check_in_time:
+            return 0
+
+        try:
+            # Get session start in UTC
+            session_start_naive = datetime.combine(self.session.session_date, self.session.start_time)
+            session_start_utc = timezone.make_aware(session_start_naive, dt_timezone.utc)
+
+            # Check-in time is already timezone-aware UTC
+            time_diff = self.check_in_time - session_start_utc
+            minutes = time_diff.total_seconds() / 60
+
+            # Only count positive lateness (can't be early)
+            return round(max(0, minutes), 1)
+        except Exception as e:
+            print(f"Error calculating lateness: {e}")
+            return 0

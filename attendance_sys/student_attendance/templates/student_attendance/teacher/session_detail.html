@@ -50,6 +50,12 @@
         color: #6c757d;
         margin-left: 5px;
     }
+    .lateness-value {
+        font-weight: 500;
+    }
+    .lateness-normal { color: #28a745; }
+    .lateness-warning { color: #ffc107; }
+    .lateness-danger { color: #dc3545; }
 </style>
 {% endblock %}
 
@@ -75,50 +81,50 @@
         <small><i class="bi bi-clock"></i> All times shown in Hong Kong Time (UTC+8)</small>
     </div>
 
-<!-- Session Information -->
-<div class="session-info mt-4">
-    <div class="row">
-        <div class="col-md-3">
-            <strong><i class="bi bi-calendar"></i> Date:</strong>
-            <p>{{ session.session_date|date:"F d, Y" }}</p>
+    <!-- Session Information -->
+    <div class="session-info mt-4">
+        <div class="row">
+            <div class="col-md-3">
+                <strong><i class="bi bi-calendar"></i> Date:</strong>
+                <p>{{ session.session_date|date:"F d, Y" }}</p>
+            </div>
+            <div class="col-md-3">
+                <strong><i class="bi bi-clock"></i> Start Time:</strong>
+                <p>
+                    {% if session.start_time_hkt %}
+                        {{ session.start_time_hkt_str }}
+                        <span class="timezone-note">(HKT)</span>
+                    {% else %}
+                        Not set
+                    {% endif %}
+                </p>
+            </div>
+            <div class="col-md-3">
+                <strong><i class="bi bi-clock-history"></i> End Time:</strong>
+                <p>
+                    {% if session.end_time_hkt %}
+                        {{ session.end_time_hkt_str }}
+                        <span class="timezone-note">(HKT)</span>
+                    {% else %}
+                        Not set
+                    {% endif %}
+                </p>
+            </div>
+            <div class="col-md-3">
+                <strong><i class="bi bi-tag"></i> Status:</strong>
+                <p>{% if session.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}</p>
+            </div>
         </div>
-        <div class="col-md-3">
-            <strong><i class="bi bi-clock"></i> Start Time:</strong>
-            <p>
-                {% if session.start_time %}
-                    {# Format the time directly - it will use the TIME_ZONE setting #}
-                    {{ session.start_time|time:"H:i" }}
-                    <span class="timezone-note">(HKT)</span>
-                {% else %}
-                    Not set
-                {% endif %}
-            </p>
+        {% if session.topic %}
+        <div class="row mt-2">
+            <div class="col-12">
+                <strong><i class="bi bi-chat-text"></i> Topic:</strong>
+                <p>{{ session.topic }}</p>
+            </div>
         </div>
-        <div class="col-md-3">
-            <strong><i class="bi bi-clock-history"></i> End Time:</strong>
-            <p>
-                {% if session.end_time %}
-                    {{ session.end_time|time:"H:i" }}
-                    <span class="timezone-note">(HKT)</span>
-                {% else %}
-                    Not set
-                {% endif %}
-            </p>
-        </div>
-        <div class="col-md-3">
-            <strong><i class="bi bi-tag"></i> Status:</strong>
-            <p>{% if session.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}</p>
-        </div>
+        {% endif %}
     </div>
-    {% if session.topic %}
-    <div class="row mt-2">
-        <div class="col-12">
-            <strong><i class="bi bi-chat-text"></i> Topic:</strong>
-            <p>{{ session.topic }}</p>
-        </div>
-    </div>
-    {% endif %}
-</div>
+
     <!-- Statistics Cards -->
     <div class="row mt-4">
         <div class="col-md-2">
@@ -236,7 +242,6 @@
                                     <th>Check-in Time (HKT)</th>
                                     <th>Lateness</th>
                                     <th>Device</th>
-
                                 </tr>
                             </thead>
                             <tbody>
@@ -257,15 +262,14 @@
                                     </td>
                                     <td>{{ log.check_in_time|localtime|date:"Y-m-d H:i:s" }}</td>
                                     <td>
-                                        {% if log.lateness_minutes > 0 %}
-                                            {# Subtract 480 minutes (8 hours) for display only #}
-                                            {% with hkt_lateness=log.lateness_minutes|add:"-480" %}
-                                                {% if hkt_lateness > 0 %}
-                                                    {{ hkt_lateness }} min
-                                                {% else %}
-                                                    {{ log.lateness_minutes }} min
-                                                {% endif %}
-                                            {% endwith %}
+                                        {% if log.status == 'LATE' and log.lateness_minutes %}
+                                            <span class="lateness-value {% if log.lateness_minutes <= 20 %}lateness-normal{% elif log.lateness_minutes <= 25 %}lateness-warning{% else %}lateness-danger{% endif %}">
+                                                {{ log.lateness_minutes }} min
+                                            </span>
+                                        {% elif log.status == 'PRESENT' and log.lateness_minutes and log.lateness_minutes > 0 %}
+                                            <span class="lateness-value lateness-normal">
+                                                {{ log.lateness_minutes }} min (on time)
+                                            </span>
                                         {% else %}
                                             -
                                         {% endif %}
@@ -275,11 +279,10 @@
                                             {{ log.device_info|truncatechars:30 }}
                                         </small>
                                     </td>
-
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted">
+                                    <td colspan="6" class="text-center text-muted">
                                         No attendance records for this session
                                     </td>
                                 </tr>

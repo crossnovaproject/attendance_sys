@@ -17,7 +17,7 @@
                         <strong>Debug:</strong> CSRF token is included in form
                     </div>
                     {% endif %}
-
+                    {% csrf_token %}
                     <form method="post" action="{% url 'student_attendance:login' %}" novalidate>
                         {% csrf_token %}
 
