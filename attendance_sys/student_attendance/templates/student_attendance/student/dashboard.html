@@ -124,7 +124,7 @@
                     </div>
                     <p class="text-muted mt-2 mb-0 small">
                         <i class="bi bi-info-circle"></i>
-                        Need 80% attendance (20% buffer). Late = -0.5, Absent/Excused = -1.
+                        Need 80% attendance: Late = -0.5, Absent/Excused = -1.
                     </p>
                 </div>
             </div>
@@ -152,7 +152,6 @@
                                     <th>Absent</th>
                                     <th>Excused</th>
                                     <th>Rate</th>
-                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -187,11 +186,6 @@
                                             -
                                         {% endif %}
                                     </td>
-                                    <td>
-                                        <span class="status-badge bg-{{ stat.status_class }}-light">
-                                            {{ stat.status }}
-                                        </span>
-                                    </td>
                                 </tr>
                                 {% empty %}
                                 <tr>
@@ -213,7 +207,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Upcoming ({{ upcoming_sessions|length }})</h5>
+                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Time table:  {{ upcoming_sessions|length }} session(s) for Upcoming</h5>
                 </div>
                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                     {% if has_upcoming %}
@@ -242,7 +236,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header bg-secondary text-white">
-                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Past ({{ past_sessions|length }})</h5>
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Past {{ past_sessions|length }} session(s)</h5>
                 </div>
                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                     {% if has_past %}
@@ -292,44 +286,44 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for a in recent_attendance %}
-                                <tr>
-                                    <td>{{ a.check_in_time|date:"m/d" }}</td>
-                                    <td>{{ a.session.course.course_id }} - {{ a.session.course.course_name|truncatechars:20 }}</td>
-                                    <td>Session {{ a.session.session_number }}</td>
-                                    <td>
-                                        {% if a.notes and 'Auto-marked' in a.notes %}
-                                            <span class="badge bg-secondary" title="{{ a.notes }}">Auto</span>
-                                        {% endif %}
-                                        <span class="badge
-                                            {% if a.status == 'PRESENT' %}bg-success
-                                            {% elif a.status == 'LATE' %}bg-warning text-dark
-                                            {% elif a.status == 'ABSENT' %}bg-danger
-                                            {% else %}bg-info{% endif %}">
-                                            {{ a.get_status_display }}
-                                        </span>
-                                        {% if a.notes and 'Auto-marked' in a.notes %}
-                                            <small class="text-muted d-block">{{ a.notes|truncatechars:50 }}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if a.status == 'PRESENT' %}
-                                            <span class="text-success">+1 session</span>
-                                        {% elif a.status == 'LATE' %}
-                                            <span class="text-warning">-0.5 buffer</span>
-                                        {% elif a.status == 'ABSENT' %}
-                                            <span class="text-danger">-1 buffer</span>
-                                        {% elif a.status == 'EXCUSED' %}
-                                            <span class="text-info">-1 buffer (excused)</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="5" class="text-center">No recent activity</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
+                            {% for a in recent_attendance %}
+                            <tr>
+                                <td>{{ a.check_in_time|date:"m/d" }}</td>
+                                <td>{{ a.session.course.course_id }} - {{ a.session.course.course_name|truncatechars:20 }}</td>
+                                <td>Session {{ a.session.session_number }}</td>
+                                <td>
+                                    {% if a.notes and 'Auto-marked' in a.notes %}
+                                        <span class="badge bg-secondary" title="{{ a.notes }}">Auto</span>
+                                    {% endif %}
+                                    <span class="badge
+                                        {% if a.status == 'PRESENT' %}bg-success
+                                        {% elif a.status == 'LATE' %}bg-warning text-dark
+                                        {% elif a.status == 'ABSENT' %}bg-danger
+                                        {% else %}bg-info{% endif %}">
+                                        {{ a.get_status_display }}
+                                    </span>
+                                    {% if a.notes and 'Auto-marked' in a.notes %}
+                                        <small class="text-muted d-block">{{ a.notes|truncatechars:50 }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if a.status == 'PRESENT' %}
+                                        <span class="text-success">present</span>
+                                    {% elif a.status == 'LATE' %}
+                                        <span class="text-warning">-0.5 buffer</span>
+                                    {% elif a.status == 'ABSENT' %}
+                                        <span class="text-danger">-1 buffer</span>
+                                    {% elif a.status == 'EXCUSED' %}
+                                        <span class="text-info">-1 buffer (excused)</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center">No recent activity</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
                         </table>
                     </div>
                 </div>
